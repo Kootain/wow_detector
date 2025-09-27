@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from mss import mss
 from PIL import Image
 import numpy as np
+from util import rgb_image_to_bytes
 
 # ----------------- 配置 -----------------
 # Lua 配置映射到 Python
@@ -46,41 +47,26 @@ def crc8(data, poly=0x07, init=0x00):
 
 # ----------------- 解码函数 -----------------
 def decode_matrix(img, grid_size, cell_px, use_crc=False):
-    arr = np.array(img.convert("RGB"))
-    data_bytes = []
-    for row in range(grid_size):
-        for col in range(grid_size):
-            y = row * cell_px + cell_px // 2
-            x = col * cell_px + cell_px // 2
-            r, g, b = arr[y, x]
-            data_bytes.extend([r, g, b])
-
-    data_bytes = bytearray(data_bytes)
+    """
+    使用util.py中的方法解析图像数据
     
-    # 检查帧头标记 0xAA
-    if len(data_bytes) < 4 or data_bytes[0] != 0xAA:
-        return None, None, False
+    Args:
+        img: PIL图像对象
+        grid_size: 网格大小（未使用，保持兼容性）
+        cell_px: 像素大小（未使用，保持兼容性）
+        use_crc: 是否使用CRC校验
     
-    seq = data_bytes[1]
-    length = data_bytes[2]
+    Returns:
+        tuple: (seq, payload, ok) - 为了兼容原有接口
+               seq始终为None（新格式不使用序列号）
+    """
+    # 使用util.py的方法解析（格式：长度+数据+校验）
+    decoded_bytes, checksum_ok, status = rgb_image_to_bytes(img, use_crc)
     
-    # 确保有足够的数据
-    if len(data_bytes) < 3 + length + 1:
-        return seq, None, False
-        
-    payload = data_bytes[3:3+length]
-    checksum = data_bytes[3+length]
-
-    # 校验 - 对整个帧（包括0xAA标记、序列号、长度和载荷）进行校验
-    frame_data = data_bytes[0:3+length]  # [0xAA, seq, length, ...payload]
-    if use_crc:
-        calc = crc8(list(frame_data))
+    if decoded_bytes is not None:
+        return None, decoded_bytes, checksum_ok
     else:
-        calc = 0
-        for v in frame_data:
-            calc ^= v
-    ok = (calc == checksum)
-    return seq, payload, ok
+        return None, None, False
 
 # ----------------- 监控区域边框窗口 -----------------
 class MonitorOverlay(QWidget):
