@@ -3,7 +3,7 @@ import time
 import threading
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit
 from PyQt6.QtGui import QPainter, QColor, QPen
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QRect
 from mss import mss
 from PIL import Image
 import numpy as np
@@ -71,6 +71,43 @@ def decode_matrix(img, grid_size, cell_px, use_crc=False):
     ok = (calc == checksum)
     return seq, payload, ok
 
+# ----------------- 监控区域边框窗口 -----------------
+class MonitorOverlay(QWidget):
+    def __init__(self, monitor_region):
+        super().__init__()
+        self.monitor_region = monitor_region
+        
+        # 设置窗口属性：置顶、透明背景、无边框
+        self.setWindowFlags(
+            Qt.WindowType.WindowStaysOnTopHint | 
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        
+        # 设置窗口位置和大小为监控区域
+        self.setGeometry(
+            monitor_region['left'] - 2,  # 边框向外扩展2像素
+            monitor_region['top'] - 2,
+            monitor_region['width'] + 4,
+            monitor_region['height'] + 4
+        )
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 设置边框样式：红色，2像素宽
+        pen = QPen(QColor(255, 0, 0, 200))  # 红色，半透明
+        pen.setWidth(2)
+        painter.setPen(pen)
+        
+        # 绘制边框矩形
+        rect = QRect(1, 1, self.width() - 2, self.height() - 2)
+        painter.drawRect(rect)
+        
+        painter.end()
+
 # ----------------- GUI -----------------
 class DecoderGUI(QWidget):
     update_signal = pyqtSignal(str)  # 定义信号
@@ -133,11 +170,24 @@ class DecoderGUI(QWidget):
 
     def closeEvent(self, event):
         self.running = False
+        # 关闭边框窗口
+        if hasattr(self, 'overlay'):
+            self.overlay.close()
         event.accept()
 
 # ----------------- 启动 -----------------
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # 创建主GUI窗口
     gui = DecoderGUI(CONFIG)
     gui.show()
+    
+    # 创建监控区域边框窗口
+    overlay = MonitorOverlay(CONFIG['monitor_region'])
+    overlay.show()
+    
+    # 将overlay引用传递给gui，以便关闭时清理
+    gui.overlay = overlay
+    
     sys.exit(app.exec())
