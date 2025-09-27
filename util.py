@@ -148,7 +148,7 @@ def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
 
 if __name__ == "__main__":
     # 示例：将字节数据转为RGB图像并展示
-    sample_data = b'Qdkne'
-    seq = 213
+    sample_data = b'5fUdw'
+    seq = 169
     img = bytes_to_rgb(seq, sample_data, 8, 8)
     img.show()
