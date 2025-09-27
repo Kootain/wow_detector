@@ -157,6 +157,10 @@ local function make_frame()
     end
 end
 
+function visual_transmit:Heartbeat()
+    -- 空实现，子类可以重写
+end
+
 -- 配置模块
 function visual_transmit:Configure(usercfg)
     for k,v in pairs(DEFAULT_CONFIG) do 
