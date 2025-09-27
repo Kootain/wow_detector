@@ -8,6 +8,12 @@ if not addonTable.visual_transmit then
 end
 local visual_transmit = addonTable.visual_transmit
 
+-- 位运算库兼容性
+local bit = bit32 or bit or {}
+if not bit.band then
+    error("No bit library available. Please ensure bit32 or bit library is loaded.")
+end
+
 -- 内置工具函数（从 util.lua 复制）
 local util = {}
 
@@ -17,10 +23,10 @@ function util.crc8(data)
     for i = 1, #data do
         crc = bit.bxor(crc, data[i])  -- XOR操作
         for j = 1, 8 do
-            if (crc & 0x80) ~= 0 then
-                crc = ((crc << 1) ~ 0x07) & 0xFF
+            if bit.band(crc, 0x80) ~= 0 then
+                crc = bit.band(bit.bxor(bit.lshift(crc, 1), 0x07), 0xFF)
             else
-                crc = (crc << 1) & 0xFF
+                crc = bit.band(bit.lshift(crc, 1), 0xFF)
             end
         end
     end
@@ -31,7 +37,7 @@ end
 function util.xor_checksum(data)
     local checksum = 0
     for i = 1, #data do
-        checksum = checksum ~ data[i]  -- XOR操作
+        checksum = bit.bxor(checksum, data[i])  -- XOR操作
     end
     return checksum
 end
