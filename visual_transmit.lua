@@ -118,7 +118,7 @@ function createZeroMatrix(n, m)
     for i = 1, n do
         matrix[i] = {}  -- 内层表作为每行的列容器
         for j = 1, m do
-            matrix[i][j] = 0  -- 初始化每个元素为 0
+            matrix[i][j] = {0,0,0}  -- 初始化每个元素为 0
         end
     end
     return matrix
@@ -132,6 +132,7 @@ end
 -- @param use_crc: 是否使用CRC8校验 (默认true)
 -- @return: RGB数据矩阵 [row][col] = {r, g, b}
 function util.bytes_to_rgb(seq_id, bytes, rows, cols)
+    print(seq_id, #bytes, rows, cols)
     -- 头部: [序列号][长度]
     local payload = {}
     -- 序列号：大端16位，拆成高8位和低8位
@@ -152,19 +153,26 @@ function util.bytes_to_rgb(seq_id, bytes, rows, cols)
     end
 
     img = createZeroMatrix(rows, cols)
+    img[1][1] = {255,255,255}
+    img[1][cols] = {255,255,255}
+    img[rows][1] = {255,255,255}
+    img[rows][cols] = {255,255,255}
+    local row = 1
+    local col = 1
     for i = 1, #payload, 3 do
-        local row = 1
-        lccal col = 1
         if (row == 1 and col == 1) or (row == 1 and col == cols) or (row == rows and col == 1) or (row == rows and col == cols) then
-            img[row][col] = {255, 255, 255}
-        else
-            img[row][col] = {payload[i] or 0, payload[i+1] or 0, payload[i+2] or 0}
+            col = col + 1
         end
-        col = col + 1
         if col > cols then
             row = row + 1
             col = 1
         end
+        local r = payload[i] or 0
+        local g = payload[i+1] or 0
+        local b = payload[i+2] or 0
+        print(row, col, r,g,b)
+        img[row][col] = {r, g, b}
+        col = col + 1
     end
     return img
 end
