@@ -195,14 +195,7 @@ function visual_transmit:SendBytes(bytes)
     append_bytes(payload, bytes)
 
     local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
-    local img = {
-        { {1,0,0}, {0,1,0} },   -- 第一行：红、绿
-        { {0,0,1}, {1,1,1} },   -- 第二行：蓝、白
-        { {1,0,0}, {0,1,0} },   -- 第一行：红、绿
-        { {0,0,1}, {1,1,1} },   -- 第二行：蓝、白
-    }
-    -- DrawPixelImage_PxAligned(self.frame, img, 0, 0)
-    -- 绘制RGB矩阵到纹理
+
     for row = 1, cfg.blocksPerRow do
         for col = 1, cfg.blocksPerCol do
             local tex = self.textures[row] and self.textures[row][col]
@@ -210,7 +203,6 @@ function visual_transmit:SendBytes(bytes)
                 local rgb = rgb_matrix[row][col]
                 tex:SetColorTexture(rgb[1]/255, rgb[2]/255, rgb[3]/255, 1)
             elseif tex then
-                -- 如果没有数据，设置为黑色
                 tex:SetColorTexture(0, 0, 0, 1)
             end
         end
