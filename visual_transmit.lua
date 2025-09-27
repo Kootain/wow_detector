@@ -15,7 +15,7 @@ local util = {}
 function util.crc8(data)
     local crc = 0
     for i = 1, #data do
-        crc = crc ~ data[i]  -- XOR操作
+        crc = bit.bxor(crc, data[i])  -- XOR操作
         for j = 1, 8 do
             if (crc & 0x80) ~= 0 then
                 crc = ((crc << 1) ~ 0x07) & 0xFF
