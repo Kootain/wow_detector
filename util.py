@@ -120,12 +120,13 @@ def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[Option
 def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     
     # 用2字节表示seq，2字节表示数据长度（大端序），再拼接数据
-    seq_bytes = seq.to_bytes(2, byteorder='big')
-    len_bytes = len(data).to_bytes(2, byteorder='big')
-    data = seq_bytes + len_bytes + data
+    # seq_bytes = seq.to_bytes(2, byteorder='big')
+    # len_bytes = len(data).to_bytes(2, byteorder='big')
+    # data = seq_bytes + len_bytes + data
+    data = bytes([seq, len(data)]) + data
     crc_checksum = crc8(data)
-    data += f'\x{crc_checksum}'
-    
+    data += bytes([crc_checksum])
+
     # 计算目标RGB矩阵所需总字节数
     total_pixels = width * height
     total_bytes_needed = total_pixels * 3
@@ -149,7 +150,7 @@ def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
 
 if __name__ == "__main__":
     # 示例：将字节数据转为RGB图像并展示
-    sample_data = b'SFIDu'
+    sample_data = b'2va3n'
     seq = 8
     img = bytes_to_rgb(seq, sample_data, 8, 8)
     img.show()

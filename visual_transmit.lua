@@ -93,6 +93,7 @@ function util.bytes_to_rgb(bytes, width, height)
             local r = full_data[byte_offset + 1] or 0
             local g = full_data[byte_offset + 2] or 0
             local b = full_data[byte_offset + 3] or 0
+            print(r, g, b)
             
             rgb_matrix[row][col] = {r, g, b}
         end
