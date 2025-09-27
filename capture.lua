@@ -6,7 +6,7 @@
 
 -- ==================== 模块加载 ====================
 -- 获取插件目录路径
-local addonName = GetAddOnMetadata("YourAddonName", "Title") or "WoWImageChannel"
+local addonName = C_AddOns.GetAddOnMetadata("YourAddonName", "Title") or "WoWImageChannel"
 local addonPath = "Interface\\AddOns\\" .. (addonName or "WoWImageChannel") .. "\\"
 
 -- 加载视觉传输模块
