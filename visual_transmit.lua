@@ -108,29 +108,11 @@ local DEFAULT_CONFIG = {
     offsetX = 10, offsetY = -10,   -- 锚点偏移
     blocksPerRow = 8,              -- 矩阵宽度（块数）
     blocksPerCol = 8,              -- 矩阵高度（块数）
-    pixelSize = 4,                 -- 每个块的像素大小（缩放）
+    pixelSize = 1,                 -- 每个块的像素大小（缩放）
     visibleToPlayer = false,       -- 是否对玩家可见；调试时设为true
     fps = 30,                      -- 期望帧率 (10..120)
     checksumMode = "crc8",         -- "none" | "xor" | "crc8"
 }
-
--- ==================== 工具函数 ====================
-local bit = bit32 or bit -- 兼容性处理
-local function clamp(v, a, b) if v < a then return a end if v > b then return b end return v end
-
--- 注意：CRC8和XOR校验函数已内置在上方的util表中
-
--- 将整数(0..2^32-1)打包为n字节(大端序)
-local function int_to_bytes(num, n)
-    local out = {}
-    for i=n,1,-1 do
-        out[i] = bit.band(num,0xFF)
-        num = bit.rshift(num,8)
-    end
-    return out
-end
-
-
 
 -- ==================== 视觉传输模块 ====================
 visual_transmit.config = {}
@@ -157,9 +139,9 @@ local function make_frame()
 
     -- 构建纹理
     visual_transmit.textures = {}
-    for r=1,cfg.blocksPerCol do
+    for r=1,cfg.blocksPerRow do
         visual_transmit.textures[r] = {}
-        for c=1,cfg.blocksPerRow do
+        for c=1,cfg.blocksPerCol do
             local t = f:CreateTexture(nil, "BACKGROUND")
             t:SetPoint("TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize, -((r-1)*cfg.pixelSize))
             t:SetSize(cfg.pixelSize, cfg.pixelSize)
@@ -181,7 +163,7 @@ function visual_transmit:Configure(usercfg)
         self.config[k] = usercfg and (usercfg[k] ~= nil and usercfg[k] or v) or v 
     end
     -- 限制fps范围
-    self.config.fps = clamp(self.config.fps, 10, 120)
+    self.config.fps = utll.clamp(self.config.fps, 10, 120)
     make_frame()
     -- 设置OnUpdate定时器
     if self.ticker then 
@@ -196,9 +178,9 @@ end
 function visual_transmit:SendBytes(bytes)
     -- 根据模式构建带头部和校验和的帧
     local cfg = self.config
-    self.sequence = (self.sequence + 1) % 256
+    self.sequence = (self.sequence + 1) % 65536
 
-    -- 头部: [0xAA标记][序列号][长度]
+    -- 头部: [序列号][长度]
     local payload = {}
     -- 序列号：大端16位，拆成高8位和低8位
     payload[#payload+1] = bit.rshift(self.sequence, 8)
@@ -209,11 +191,11 @@ function visual_transmit:SendBytes(bytes)
     payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
     append_bytes(payload, bytes)
 
-    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
+    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerCol, cfg.blocksPerRow)
 
     -- 绘制RGB矩阵到纹理
-    for row = 1, cfg.blocksPerCol do
-        for col = 1, cfg.blocksPerRow do
+    for row = 1, cfg.blocksPerRow do
+        for col = 1, cfg.blocksPerCol do
             local tex = self.textures[row] and self.textures[row][col]
             if tex and rgb_matrix[row] and rgb_matrix[row][col] then
                 local rgb = rgb_matrix[row][col]
@@ -226,32 +208,9 @@ function visual_transmit:SendBytes(bytes)
     end
 end
 
--- 心跳：目前为空，但可用于重传最后一帧或闪烁
-function visual_transmit:Heartbeat()
-    -- 默认无操作
-end
-
 -- 测试辅助函数
 function visual_transmit:SendRandomPayload(numBytes)
     local bytes = {}
     for i=1,numBytes do bytes[i] = math.random(0,255) end
     self:SendBytes(bytes)
 end
-
-function visual_transmit:Benchmark(durationSec)
-    durationSec = durationSec or 5
-    local cfg = self.config
-    local totalFrames = 0
-    local t0 = GetTime()
-    local function step()
-        self:SendRandomPayload(math.min( cfg.blocksPerRow*cfg.blocksPerCol*3 - 4, 128))
-        totalFrames = totalFrames + 1
-    end
-    local ticker = C_Timer.NewTicker(1/cfg.fps, step)
-    C_Timer.After(durationSec, function() 
-        ticker:Cancel()
-        print("VI Benchmark frames:", totalFrames) 
-    end)
-end
-
--- 模块已通过 addonTable.visual_transmit 导出

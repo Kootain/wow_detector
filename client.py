@@ -13,7 +13,7 @@ from util import rgb_image_to_bytes
 # Lua 配置映射到 Python
 BLOCKS_X = 8
 BLOCKS_Y = 8
-PIXEL_SIZE = 4
+PIXEL_SIZE = 1
 FPS = 30
 USE_CRC = True
 OFFSET_X = 10
@@ -33,23 +33,6 @@ CONFIG = {
     "use_crc": USE_CRC
 }
 
-# ----------------- 解码函数 -----------------
-def decode_matrix(img):
-    """
-    使用util.py中的方法解析图像数据
-    
-    Args:
-        img: PIL图像对象
-        grid_size: 网格大小（未使用，保持兼容性）
-        cell_px: 像素大小（未使用，保持兼容性）
-        use_crc: 是否使用CRC校验
-    
-    Returns:
-        tuple: (seq, payload, ok) - 为了兼容原有接口
-               seq始终为None（新格式不使用序列号）
-    """
-    seq_id, data, checksume = rgb_image_to_bytes(img)
-    
 
 # ----------------- 监控区域边框窗口 -----------------
 class MonitorOverlay(QWidget):
@@ -67,10 +50,10 @@ class MonitorOverlay(QWidget):
         
         # 设置窗口位置和大小为监控区域
         self.setGeometry(
-            monitor_region['left'] - 2,  # 边框向外扩展2像素
-            monitor_region['top'] - 2,
-            monitor_region['width'] + 4,
-            monitor_region['height'] + 4
+            monitor_region['left'],  # 边框向外扩展2像素
+            monitor_region['top'],
+            monitor_region['width'],
+            monitor_region['height']
         )
 
 

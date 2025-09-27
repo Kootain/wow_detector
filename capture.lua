@@ -45,9 +45,9 @@ function StopVI()
         visual_transmit.ticker:Cancel()
         visual_transmit.ticker = nil
     end
-    if visual_transmit and visual_transmit.frame then
-        visual_transmit.frame:Hide()
-    end
+    -- if visual_transmit and visual_transmit.frame then
+    --     visual_transmit.frame:Hide()
+    -- end
     print("VI stopped")
 end
 
@@ -76,24 +76,15 @@ function VI_SendCurrentState()
 end
 
 -- 测试函数
-function VI_Test(length)
-    length = length or 32
+function VI_Test(text)
     if visual_transmit then
-        -- 生成指定长度的随机字符串
-        local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        local randomString = ""
-        for i = 1, length do
-            local randomIndex = math.random(1, #chars)
-            randomString = randomString .. chars:sub(randomIndex, randomIndex)
-        end
-        
         -- 在聊天界面输出随机字符串
-        print("Generated random string (" .. length .. " chars): " .. randomString)
+        print("Generated random string " .. text)
         
         -- 将字符串转换为字节数组并发送
         local bytes = {}
-        for i = 1, #randomString do
-            bytes[i] = string.byte(randomString, i)
+        for i = 1, #text do
+            bytes[i] = string.byte(text, i)
         end
         visual_transmit:SendBytes(bytes)
         print("Sent random string via visual transmit")
@@ -123,8 +114,8 @@ SlashCmdList["VI"] = function(msg)
     elseif cmd == "stop" then
         StopVI()
     elseif cmd == "test" then
-        local length = tonumber(args[2]) or 32
-        VI_Test(length)
+        local text = args[2]
+        VI_Test(text)
     elseif cmd == "bench" or cmd == "benchmark" then
         local duration = tonumber(args[2]) or 5
         VI_Benchmark(duration)
