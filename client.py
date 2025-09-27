@@ -1,8 +1,8 @@
 import sys
 import time
 import threading
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit
-from PyQt6.QtGui import QPainter, QColor, QPen
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit, QHBoxLayout
+from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal, QRect
 from mss import mss
 from PIL import Image
@@ -110,11 +110,11 @@ class MonitorOverlay(QWidget):
 
 # ----------------- GUI -----------------
 class DecoderGUI(QWidget):
-    update_signal = pyqtSignal(str)  # 定义信号
+    update_signal = pyqtSignal(str, object)  # 修改信号，添加图像参数
     def __init__(self, config):
         super().__init__()
         self.setWindowTitle("WoW Matrix Decoder")
-        self.setGeometry(50, 50, 400, 300)
+        self.setGeometry(50, 50, 600, 400)  # 增加窗口宽度以容纳图像
         # 窗口置顶且半透明，防止遮挡游戏像素块
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -126,14 +126,34 @@ class DecoderGUI(QWidget):
         self.use_crc = config['use_crc']
 
         # UI 元素
-        self.layout = QVBoxLayout()
+        self.main_layout = QVBoxLayout()
         self.info_label = QLabel("等待数据...")
+        
+        # 水平布局：左侧显示监控区域图像，右侧显示文本信息
+        self.content_layout = QHBoxLayout()
+        
+        # 监控区域图像显示
+        self.image_label = QLabel("监控区域")
+        self.image_label.setFixedSize(200, 200)  # 固定大小
+        self.image_label.setStyleSheet("border: 1px solid gray; background-color: black;")
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setScaledContents(True)  # 自动缩放图像
+        
+        # 文本区域
         self.text_area = QTextEdit()
         self.text_area.setReadOnly(True)
-        self.layout.addWidget(self.info_label)
-        self.layout.addWidget(self.text_area)
-        self.setLayout(self.layout)
-        self.update_signal.connect(self.update_text)
+        self.text_area.setMinimumWidth(300)
+        
+        # 添加到水平布局
+        self.content_layout.addWidget(self.image_label)
+        self.content_layout.addWidget(self.text_area)
+        
+        # 添加到主布局
+        self.main_layout.addWidget(self.info_label)
+        self.main_layout.addLayout(self.content_layout)
+        
+        self.setLayout(self.main_layout)
+        self.update_signal.connect(self.update_display)
 
         # self.sct = mss()
         self.running = True
@@ -142,9 +162,30 @@ class DecoderGUI(QWidget):
         self.thread = threading.Thread(target=self.update_loop, daemon=True)
         self.thread.start()
 
-    def update_text(self, info):
-            self.info_label.setText(f"监控区域: {self.monitor_region}")
-            self.text_area.setText(info)
+    def update_display(self, info, image):
+        self.info_label.setText(f"监控区域: {self.monitor_region}")
+        self.text_area.setText(info)
+        
+        # 更新监控区域图像
+        if image is not None:
+            # 将PIL图像转换为QPixmap
+            image_rgb = image.convert('RGB')
+            width, height = image_rgb.size
+            # 放大图像以便更好地查看
+            scale_factor = min(200 // width, 200 // height, 10)  # 最大放大10倍
+            new_width = width * scale_factor
+            new_height = height * scale_factor
+            image_scaled = image_rgb.resize((new_width, new_height), Image.NEAREST)
+            
+            # 转换为QPixmap
+            import io
+            buffer = io.BytesIO()
+            image_scaled.save(buffer, format='PNG')
+            buffer.seek(0)
+            pixmap = QPixmap()
+            pixmap.loadFromData(buffer.getvalue())
+            
+            self.image_label.setPixmap(pixmap)
 
     def paintEvent(self, event):
         # GUI 窗口本身半透明，无需绘制矩形框到游戏上
@@ -164,7 +205,8 @@ class DecoderGUI(QWidget):
             except Exception as e:
                 info = f"解码错误: {e}"
 
-            self.update_signal.emit(info)
+            # 发送信号时同时传递文本信息和图像
+            self.update_signal.emit(info, img)
 
             time.sleep(1 / CONFIG['fps'])
 
