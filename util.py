@@ -67,7 +67,7 @@ def rgb_to_bytes(rgb_matrix: np.ndarray) -> Tuple[int, bytes, bool]:
     data_len = int.from_bytes(flat_bytes[2:4], byteorder='big')
     
     # 计算校验值
-    checksum = crc8(flat_bytes[:-1])
+    checksum = crc8(flat_bytes[:data_len+4])
     
     return seq_id, flat_bytes[4:data_len+4], checksum == flat_bytes[-1]
 
