@@ -95,10 +95,10 @@ local function make_frame()
             t:SetSize(cfg.pixelSize, cfg.pixelSize)
             t:SetDrawLayer("BACKGROUND")
             if cfg.visibleToPlayer then
-                t:SetTexture(1,1,1,0.9)
+                t:SetTexture(1,1,1,1)
             else
-                -- 几乎透明但仍可渲染；建议alpha为1以便外部捕获能看到
-                t:SetTexture(0,0,0,0)
+                -- 不透明的黑色纹理，确保不被游戏内容干扰
+                t:SetTexture(0,0,0,1)
             end
             visual_transmit.textures[r][c] = t
         end
