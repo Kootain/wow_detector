@@ -8,6 +8,9 @@ if not addonTable.visual_transmit then
 end
 local visual_transmit = addonTable.visual_transmit
 
+-- 引入工具函数库
+local util = require("util")
+
 -- ==================== 配置 ====================
 local DEFAULT_CONFIG = {
     anchorPoint = "TOPLEFT", -- 屏幕锚点位置
@@ -24,28 +27,7 @@ local DEFAULT_CONFIG = {
 local bit = bit32 or bit -- 兼容性处理
 local function clamp(v, a, b) if v < a then return a end if v > b then return b end return v end
 
--- 简单的CRC-8实现 (多项式 0x07)
-local function crc8(bytes)
-    local crc = 0
-    for i=1,#bytes do
-        crc = bit.bxor(crc, bytes[i])
-        for j=1,8 do
-            if bit.band(crc, 0x80) ~= 0 then
-                crc = bit.band(bit.lshift(crc,1),0xFF)
-                crc = bit.bxor(crc, 0x07)
-            else
-                crc = bit.band(bit.lshift(crc,1),0xFF)
-            end
-        end
-    end
-    return crc
-end
-
-local function xor_checksum(bytes)
-    local x = 0
-    for i=1,#bytes do x = bit.bxor(x, bytes[i]) end
-    return bit.band(x,0xFF)
-end
+-- 注意：CRC8和XOR校验函数现在使用util.lua中的实现
 
 -- 将整数(0..2^32-1)打包为n字节(大端序)
 local function int_to_bytes(num, n)
@@ -135,39 +117,21 @@ function visual_transmit:SendBytes(bytes)
     payload[#payload+1] = #bytes
     append_bytes(payload, bytes)
 
-    local ch = 0
-    if cfg.checksumMode == "crc8" then 
-        ch = crc8(payload)
-    elseif cfg.checksumMode == "xor" then 
-        ch = xor_checksum(payload)
-    else 
-        ch = 0 
-    end
-    payload[#payload+1] = ch
+    -- 使用util.lua中的bytes_to_rgb方法进行转换
+    local use_crc = (cfg.checksumMode == "crc8")
+    local rgb_matrix, frame_len = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol, use_crc)
 
-    -- 将载荷字节绘制到矩阵中，每个块作为RGB三元组
-    -- 清除剩余块为零以避免陈旧数据（有助于在噪声视觉中保持完整性）
-    local totalBlocks = cfg.blocksPerRow * cfg.blocksPerCol
-    local totalByteCapacity = totalBlocks * 3
-
-    -- 构建大小为totalByteCapacity的完整字节数组
-    local full = {}
-    for i=1,totalByteCapacity do full[i] = 0 end
-    for i=1,#payload do full[i] = payload[i] end
-
-    -- 应用量化/安全性：限制0..255
-    for i=1,totalByteCapacity do full[i] = clamp(full[i],0,255) end
-
-    -- 绘制
-    for b=1,totalBlocks do
-        local rByte = full[(b-1)*3 + 1] or 0
-        local gByte = full[(b-1)*3 + 2] or 0
-        local bByte = full[(b-1)*3 + 3] or 0
-        local row = math.floor((b-1) / cfg.blocksPerRow) + 1
-        local col = ((b-1) % cfg.blocksPerRow) + 1
-        local tex = self.textures[row] and self.textures[row][col]
-        if tex then
-            tex:SetColorTexture(rByte/255, gByte/255, bByte/255, 1)
+    -- 绘制RGB矩阵到纹理
+    for row = 1, cfg.blocksPerCol do
+        for col = 1, cfg.blocksPerRow do
+            local tex = self.textures[row] and self.textures[row][col]
+            if tex and rgb_matrix[row] and rgb_matrix[row][col] then
+                local rgb = rgb_matrix[row][col]
+                tex:SetColorTexture(rgb[1]/255, rgb[2]/255, rgb[3]/255, 1)
+            elseif tex then
+                -- 如果没有数据，设置为黑色
+                tex:SetColorTexture(0, 0, 0, 1)
+            end
         end
     end
 end
