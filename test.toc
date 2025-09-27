@@ -1,0 +1,7 @@
+## Interface: 40402  # 适配的游戏版本号（正式服/怀旧服不同，需对应）
+## Title: MyFirstAddon  # 插件名称（游戏内显示）
+## Version: 1.0
+## Author: YourName
+## Notes: 我的第一个插件测试
+test_2.lua
+test_kootain.lua
