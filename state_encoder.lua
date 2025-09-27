@@ -140,11 +140,11 @@ end
 local function collect_cooldowns()
     local out = {}
     for i,spell in ipairs(state_encoder.watchSpells) do
-        local start, duration, enabled = GetSpellCooldown(spell)
+        local cooldownInfo = C_Spell.GetSpellCooldown(spell)
         local ready_in = 0
-        if enabled == 1 and duration and duration > 1.5 then
+        if cooldownInfo and cooldownInfo.isEnabled and cooldownInfo.duration and cooldownInfo.duration > 1.5 then
             -- 返回剩余毫秒数
-            ready_in = math.max(0, math.floor((start + duration - GetTime()) * 1000))
+            ready_in = math.max(0, math.floor((cooldownInfo.startTime + cooldownInfo.duration - GetTime()) * 1000))
         end
         out[#out+1] = {
             spell = spell, 
