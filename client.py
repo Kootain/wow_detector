@@ -56,17 +56,28 @@ def decode_matrix(img, grid_size, cell_px, use_crc=False):
             data_bytes.extend([r, g, b])
 
     data_bytes = bytearray(data_bytes)
-    seq = data_bytes[0]
-    length = data_bytes[1]
-    payload = data_bytes[2:2+length]
-    checksum = data_bytes[2+length]
+    
+    # 检查帧头标记 0xAA
+    if len(data_bytes) < 4 or data_bytes[0] != 0xAA:
+        return None, None, False
+    
+    seq = data_bytes[1]
+    length = data_bytes[2]
+    
+    # 确保有足够的数据
+    if len(data_bytes) < 3 + length + 1:
+        return seq, None, False
+        
+    payload = data_bytes[3:3+length]
+    checksum = data_bytes[3+length]
 
-    # 校验
+    # 校验 - 对整个帧（包括0xAA标记、序列号、长度和载荷）进行校验
+    frame_data = data_bytes[0:3+length]  # [0xAA, seq, length, ...payload]
     if use_crc:
-        calc = crc8([seq, length] + list(payload))
+        calc = crc8(list(frame_data))
     else:
         calc = 0
-        for v in [seq, length] + list(payload):
+        for v in frame_data:
             calc ^= v
     ok = (calc == checksum)
     return seq, payload, ok
@@ -201,7 +212,17 @@ class DecoderGUI(QWidget):
             # 解码
             try:
                 seq, payload, ok = decode_matrix(img, self.grid_size, self.cell_px, self.use_crc)
-                info = f"Seq: {seq}\nPayload: {payload}\n校验: {'OK' if ok else '错误'}"
+                if seq is None:
+                    info = "等待有效帧... (未检测到0xAA帧头)"
+                else:
+                    payload_str = f"[{len(payload)} bytes]" if payload else "[空载荷]"
+                    info = f"Seq: {seq}\nPayload: {payload_str}\n校验: {'OK' if ok else '错误'}"
+                    if payload and len(payload) > 0:
+                        # 显示载荷的前几个字节用于调试
+                        preview = ' '.join([f'{b:02X}' for b in payload[:min(8, len(payload))]])
+                        if len(payload) > 8:
+                            preview += '...'
+                        info += f"\n数据预览: {preview}"
             except Exception as e:
                 info = f"解码错误: {e}"
 
