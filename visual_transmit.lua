@@ -14,6 +14,11 @@ if not bit.band then
     error("No bit library available. Please ensure bit32 or bit library is loaded.")
 end
 
+-- 将源字节数组追加到目标数组
+local function append_bytes(dest, src)
+    for i=1,#src do dest[#dest+1] = src[i] end
+end
+
 -- 内置工具函数（从 util.lua 复制）
 local util = {}
 
@@ -55,25 +60,12 @@ end
 -- @param height: 图像高度(像素块数)
 -- @param use_crc: 是否使用CRC8校验 (默认true)
 -- @return: RGB数据矩阵 [row][col] = {r, g, b}
-function util.bytes_to_rgb(bytes, width, height, use_crc)
-    if use_crc == nil then use_crc = true end
-    
-    -- 构建帧数据: [长度][...bytes][校验和]
+function util.bytes_to_rgb(bytes, width, height)
     local frame = {}
-    frame[1] = #bytes  -- 长度字节
-    
-    -- 添加原始数据
-    for i = 1, #bytes do
-        frame[#frame + 1] = bytes[i]
-    end
+    append_bytes(frame, bytes)
     
     -- 计算并添加校验和
-    local checksum
-    if use_crc then
-        checksum = util.crc8(frame)
-    else
-        checksum = util.xor_checksum(frame)
-    end
+    local checksum = util.crc8(frame)
     frame[#frame + 1] = checksum
     
     -- 计算总容量
@@ -106,7 +98,7 @@ function util.bytes_to_rgb(bytes, width, height, use_crc)
         end
     end
     
-    return rgb_matrix, #frame  -- 返回RGB矩阵和实际帧长度
+    return rgb_matrix
 end
 
 -- ==================== 配置 ====================
@@ -137,10 +129,7 @@ local function int_to_bytes(num, n)
     return out
 end
 
--- 将源字节数组追加到目标数组
-local function append_bytes(dest, src)
-    for i=1,#src do dest[#dest+1] = src[i] end
-end
+
 
 -- ==================== 视觉传输模块 ====================
 visual_transmit.config = {}
@@ -210,14 +199,11 @@ function visual_transmit:SendBytes(bytes)
 
     -- 头部: [0xAA标记][序列号][长度]
     local payload = {}
-    payload[#payload+1] = 0xAA
     payload[#payload+1] = self.sequence
     payload[#payload+1] = #bytes
     append_bytes(payload, bytes)
 
-    -- 使用util.lua中的bytes_to_rgb方法进行转换
-    local use_crc = (cfg.checksumMode == "crc8")
-    local rgb_matrix, frame_len = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol, use_crc)
+    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
 
     -- 绘制RGB矩阵到纹理
     for row = 1, cfg.blocksPerCol do

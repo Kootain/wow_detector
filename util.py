@@ -9,12 +9,12 @@ import numpy as np
 from PIL import Image
 from typing import Tuple, Optional, List
 
-def crc8(data: List[int], poly: int = 0x07, init: int = 0x00) -> int:
+def crc8(data: bytes, poly: int = 0x07, init: int = 0x00) -> int:
     """
     CRC-8校验函数 (多项式0x07)
     
     Args:
-        data: 字节数据列表
+        data: 字节数据
         poly: CRC多项式 (默认0x07)
         init: 初始值 (默认0x00)
     
@@ -117,96 +117,39 @@ def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[Option
     rgb_array = np.array(image.convert("RGB"))
     return rgb_to_bytes(rgb_array, use_crc)
 
-def create_test_rgb_matrix(bytes_data: List[int], width: int, height: int, use_crc: bool = True) -> np.ndarray:
-    """
-    创建测试用的RGB矩阵 (模拟Lua的输出)
+def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     
-    Args:
-        bytes_data: 原始字节数据
-        width: 图像宽度(块数)
-        height: 图像高度(块数)
-        use_crc: 是否使用CRC8校验
+    # 用2字节表示seq，2字节表示数据长度（大端序），再拼接数据
+    seq_bytes = seq.to_bytes(2, byteorder='big')
+    len_bytes = len(data).to_bytes(2, byteorder='big')
+    data = seq_bytes + len_bytes + data
+    crc_checksum = crc8(data)
+    data += f'\x{crc_checksum}'
     
-    Returns:
-        RGB矩阵 [height, width, 3]
-    """
-    # 构建帧数据: [长度][...bytes][校验和]
-    frame = [len(bytes_data)] + bytes_data
+    # 计算目标RGB矩阵所需总字节数
+    total_pixels = width * height
+    total_bytes_needed = total_pixels * 3
     
-    # 计算校验和
-    if use_crc:
-        checksum = crc8(frame)
+    # 如果数据不足，用0填充；如果超出，则截断
+    if len(data) < total_bytes_needed:
+        data += b'\x00' * (total_bytes_needed - len(data))
     else:
-        checksum = xor_checksum(frame)
-    frame.append(checksum)
+        data = data[:total_bytes_needed]
     
-    # 计算总容量并填充
-    total_blocks = width * height
-    total_capacity = total_blocks * 3
+    # 将数据重塑为RGB三通道矩阵
+    rgb_matrix = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 3)
+    print(rgb_matrix)
     
-    full_data = frame + [0] * (total_capacity - len(frame))
-    full_data = full_data[:total_capacity]  # 确保不超出容量
+    # 将RGB矩阵转换为PIL图像对象
+    image = Image.fromarray(rgb_matrix, mode='RGB')
     
-    # 转换为RGB矩阵
-    rgb_matrix = np.zeros((height, width, 3), dtype=np.uint8)
-    
-    for row in range(height):
-        for col in range(width):
-            block_index = row * width + col
-            byte_offset = block_index * 3
-            
-            if byte_offset + 2 < len(full_data):
-                rgb_matrix[row, col] = [
-                    full_data[byte_offset],
-                    full_data[byte_offset + 1], 
-                    full_data[byte_offset + 2]
-                ]
-    
-    return rgb_matrix
+    return image
 
-def test_rgb_to_bytes():
-    """
-    测试RGB转bytes功能
-    """
-    print("\n=== 测试 RGB转bytes 功能 ===")
-    
-    # 测试用例1: 简单数据
-    test_data = [1, 2, 3, 4, 5]
-    print(f"\n测试数据: {test_data}")
-    
-    # 创建RGB矩阵
-    rgb_matrix = create_test_rgb_matrix(test_data, 4, 4, use_crc=True)
-    print(f"RGB矩阵形状: {rgb_matrix.shape}")
-    
-    # 反解
-    decoded_bytes, checksum_ok, status = rgb_to_bytes(rgb_matrix, use_crc=True)
-    print(f"状态: {status}")
-    
-    if decoded_bytes is not None:
-        print(f"解码结果: {decoded_bytes}")
-        print(f"数据正确性: {'✅正确' if decoded_bytes == test_data else '❌错误'}")
-    
-    # 测试用例2: 较长数据
-    long_data = list(range(20))
-    print(f"\n长数据测试: {long_data}")
-    
-    rgb_matrix2 = create_test_rgb_matrix(long_data, 8, 8, use_crc=True)
-    decoded_bytes2, checksum_ok2, status2 = rgb_to_bytes(rgb_matrix2, use_crc=True)
-    
-    print(f"状态: {status2}")
-    if decoded_bytes2 is not None:
-        print(f"解码长度: {len(decoded_bytes2)}")
-        print(f"前10个字节: {decoded_bytes2[:10]}")
-        print(f"数据正确性: {'✅正确' if decoded_bytes2 == long_data else '❌错误'}")
-    
-    # 测试用例3: 校验和错误
-    print("\n校验和错误测试:")
-    corrupted_matrix = rgb_matrix.copy()
-    corrupted_matrix[0, 0, 0] = 255  # 破坏第一个字节
-    
-    decoded_bytes3, checksum_ok3, status3 = rgb_to_bytes(corrupted_matrix, use_crc=True)
-    print(f"状态: {status3}")
-    print(f"校验结果: {'✅通过' if checksum_ok3 else '❌失败 (符合预期)'}")
+
 
 if __name__ == "__main__":
-    test_rgb_to_bytes()
+    # 示例：将字节数据转为RGB图像并展示
+    sample_data = b'SFIDu'
+    seq = 8
+    img = bytes_to_rgb(seq, sample_data, 8, 8)
+    img.show()
