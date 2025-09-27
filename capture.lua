@@ -5,43 +5,10 @@
 -- 2) state_encoder: 游戏状态采集模块
 
 -- ==================== 模块加载 ====================
--- 获取插件目录路径
-local addonName = C_AddOns.GetAddOnMetadata("YourAddonName", "Title") or "WoWImageChannel"
-local addonPath = "Interface\\AddOns\\" .. (addonName or "WoWImageChannel") .. "\\"
-
--- 加载视觉传输模块
-local visual_transmit
-do
-    local chunk, err = loadfile(addonPath .. "visual_transmit.lua")
-    if chunk then
-        visual_transmit = chunk()
-    else
-        -- 回退：尝试直接require（如果支持）
-        local ok, module = pcall(require, "visual_transmit")
-        if ok then
-            visual_transmit = module
-        else
-            error("Failed to load visual_transmit module: " .. (err or "unknown error"))
-        end
-    end
-end
-
--- 加载状态编码模块
-local state_encoder
-do
-    local chunk, err = loadfile(addonPath .. "state_encoder.lua")
-    if chunk then
-        state_encoder = chunk()
-    else
-        -- 回退：尝试直接require（如果支持）
-        local ok, module = pcall(require, "state_encoder")
-        if ok then
-            state_encoder = module
-        else
-            error("Failed to load state_encoder module: " .. (err or "unknown error"))
-        end
-    end
-end
+-- 获取插件参数和模块引用
+local addonName, addonTable = ...
+local visual_transmit = addonTable.visual_transmit
+local state_encoder = addonTable.state_encoder
 
 -- ==================== 模块集成 ====================
 -- 将视觉传输模块引用传递给状态编码模块

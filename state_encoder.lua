@@ -2,7 +2,11 @@
 -- 游戏状态编码模块：收集玩家状态并序列化为字节数据
 -- 包括buff/debuff、生命值/法力值、技能冷却、施法状态等
 
-local state_encoder = {}
+local addonName, addonTable = ...
+if not addonTable.state_encoder then
+    addonTable.state_encoder = {}
+end
+local state_encoder = addonTable.state_encoder
 
 -- ==================== 配置 ====================
 state_encoder.pollInterval = 0.1 -- 轮询间隔（秒）
@@ -308,5 +312,4 @@ function state_encoder:SendCurrentState()
     end
 end
 
--- 导出模块
-return state_encoder
+-- 模块已通过 addonTable.state_encoder 导出

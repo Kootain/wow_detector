@@ -2,7 +2,11 @@
 -- 视觉传输模块：负责将字节数据通过RGB像素矩阵进行可视化传输
 -- 独立模块，不依赖游戏状态API，提供 SendBytes(bytes) 接口
 
-local visual_transmit = {}
+local addonName, addonTable = ...
+if not addonTable.visual_transmit then
+    addonTable.visual_transmit = {}
+end
+local visual_transmit = addonTable.visual_transmit
 
 -- ==================== 配置 ====================
 local DEFAULT_CONFIG = {
@@ -196,5 +200,4 @@ function visual_transmit:Benchmark(durationSec)
     end)
 end
 
--- 导出模块
-return visual_transmit
+-- 模块已通过 addonTable.visual_transmit 导出

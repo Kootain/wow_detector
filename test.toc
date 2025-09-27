@@ -3,4 +3,7 @@
 ## Version: 1.0
 ## Author: YourName
 ## Notes: 我的第一个插件测试
+
+visual_transmit.lua
+state_encoder.lua
 capture.lua
