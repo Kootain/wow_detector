@@ -173,11 +173,7 @@ class DecoderGUI(QWidget):
                     payload_str = f"[{len(payload)} bytes]" if payload else "[空载荷]"
                     info = f"Seq: {seq}\nPayload: {payload_str}\n校验: {'OK' if ok else '错误'}"
                     if payload and len(payload) > 0:
-                        # 显示载荷的前几个字节用于调试
-                        preview = ' '.join([f'{b:02X}' for b in payload[:min(8, len(payload))]])
-                        if len(payload) > 8:
-                            preview += '...'
-                        info += f"\n数据预览: {preview}"
+                        info += f"\n数据预览: {payload}"
             except Exception as e:
                 info = f"解码错误: {e}"
 
