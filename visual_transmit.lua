@@ -112,50 +112,61 @@ local function DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
     end
 end
 
+
+function createZeroMatrix(n, m)
+    local matrix = {}  -- 外层表作为行容器
+    for i = 1, n do
+        matrix[i] = {}  -- 内层表作为每行的列容器
+        for j = 1, m do
+            matrix[i][j] = 0  -- 初始化每个元素为 0
+        end
+    end
+    return matrix
+end
+
+
 -- 将bytes数组转换为RGB图像数据
 -- @param bytes: 字节数组 (0-255的整数)
 -- @param width: 图像宽度(像素块数)
 -- @param height: 图像高度(像素块数)
 -- @param use_crc: 是否使用CRC8校验 (默认true)
 -- @return: RGB数据矩阵 [row][col] = {r, g, b}
-function util.bytes_to_rgb(bytes, width, height)
-    local frame = {}
-    append_bytes(frame, bytes)
+function util.bytes_to_rgb(seq_id, bytes, rows, cols)
+    -- 头部: [序列号][长度]
+    local payload = {}
+    -- 序列号：大端16位，拆成高8位和低8位
+    payload[#payload+1] = bit.rshift(seq_id, 8)
+    payload[#payload+1] = bit.band(seq_id, 0xFF)
+    -- 长度：大端16位，拆成高8位和低8位
+    local len = #bytes
+    payload[#payload+1] = bit.rshift(len, 8)   -- 高8位
+    payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
+    append_bytes(payload, bytes)
     
     -- 计算并添加校验和
-    local checksum = util.crc8(frame)
-    frame[#frame + 1] = checksum
-    
-    -- 计算总容量
-    local total_blocks = width * height
-    local total_capacity = total_blocks * 3  -- 每个块3个字节(RGB)
-    
-    -- 创建完整的字节数组，不足部分填充0
-    local full_data = {}
-    for i = 1, total_capacity do
-        if i <= #frame then
-            full_data[i] = util.clamp(frame[i], 0, 255)
+    local checksum = util.crc8(payload)
+    payload[#payload + 1] = checksum
+
+    if #payload > (rows * cols - 4) * 3 then
+        return error("Payload exceeds maximum capacity")
+    end
+
+    img = createZeroMatrix(rows, cols)
+    for i = 1, #payload, 3 do
+        local row = 1
+        lccal col = 1
+        if (row == 1 and col == 1) or (row == 1 and col == cols) or (row == rows and col == 1) or (row == rows and col == cols) then
+            img[row][col] = {255, 255, 255}
         else
-            full_data[i] = 0
+            img[row][col] = {payload[i] or 0, payload[i+1] or 0, payload[i+2] or 0}
+        end
+        col = col + 1
+        if col > cols then
+            row = row + 1
+            col = 1
         end
     end
-    
-    -- 转换为RGB矩阵
-    local rgb_matrix = {}
-    for row = 1, height do
-        rgb_matrix[row] = {}
-        for col = 1, width do
-            local block_index = (row - 1) * width + col
-            local byte_offset = (block_index - 1) * 3
-            
-            local r = full_data[byte_offset + 1] or 0
-            local g = full_data[byte_offset + 2] or 0
-            local b = full_data[byte_offset + 3] or 0
-            rgb_matrix[row][col] = {r, g, b}
-        end
-    end
-    
-    return rgb_matrix
+    return img
 end
 
 -- ==================== 配置 ====================
@@ -239,54 +250,8 @@ function visual_transmit:SendBytes(bytes)
     -- 根据模式构建带头部和校验和的帧
     local cfg = self.config
     self.sequence = (self.sequence + 1) % 65536
-
-    -- 头部: [序列号][长度]
-    local payload = {}
-    -- 序列号：大端16位，拆成高8位和低8位
-    payload[#payload+1] = bit.rshift(self.sequence, 8)
-    payload[#payload+1] = bit.band(self.sequence, 0xFF)
-    -- 长度：大端16位，拆成高8位和低8位
-    local len = #bytes
-    payload[#payload+1] = bit.rshift(len, 8)   -- 高8位
-    payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
-    append_bytes(payload, bytes)
-    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
-
-    local rgbArray = {
-        {255, 0, 0},     -- 红
-        {255, 255, 0},   -- 黄
-        {0, 0, 255},     -- 蓝
-        {255, 0, 0},     -- 红
-        {255, 255, 0},   -- 黄
-        {0, 0, 255},     -- 蓝
-        {255, 0, 0},     -- 红
-        {255, 255, 0},   -- 黄
-        {0, 0, 255},     -- 蓝
-        {255, 0, 0},     -- 红
-        {255, 255, 0},   -- 黄
-        {0, 0, 255},     -- 蓝
-        {255, 0, 0},     -- 红
-        {255, 255, 0},   -- 黄
-        {0, 0, 255},     -- 蓝
-    }
-    img = {}
-    local n = 1
-    for row = 1, cfg.blocksPerRow do
-        img[row] = {}
-        for col = 1, cfg.blocksPerCol do
-            local tex = self.textures[row] and self.textures[row][col]
-            if tex and rgb_matrix[row] and rgb_matrix[row][col] then
-                -- local rgb = rgb_matrix[row][col]
-                local rgb = rgbArray[n%12 + 1]
-                n = n + 1
-                img[row][col] = rgb
-                -- tex:SetColorTexture(rgb[1]/255, rgb[2]/255, rgb[3]/255, 1)
-            elseif tex then
-                -- tex:SetColorTexture(0, 0, 0, 1)
-            end
-        end
-    end
-    DrawPixelImage_PxAligned(self.frame, img, cfg.offsetX, cfg.offsetY, 3)
+    local rgb_matrix = util.bytes_to_rgb(self.sequence, bytes, cfg.blocksPerRow, cfg.blocksPerCol)
+    DrawPixelImage_PxAligned(self.frame, rgb_matrix, cfg.offsetX, cfg.offsetY, cfg.pixelSize)
 end
 
 -- 测试辅助函数
