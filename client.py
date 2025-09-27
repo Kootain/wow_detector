@@ -33,18 +33,6 @@ CONFIG = {
     "use_crc": USE_CRC
 }
 
-# ----------------- CRC8 -----------------
-def crc8(data, poly=0x07, init=0x00):
-    crc = init
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = ((crc << 1) ^ poly) & 0xFF
-            else:
-                crc = (crc << 1) & 0xFF
-    return crc
-
 # ----------------- 解码函数 -----------------
 def decode_matrix(img, grid_size, cell_px, use_crc=False):
     """
