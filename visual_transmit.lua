@@ -54,7 +54,7 @@ function util.clamp(value, min, max)
     return value
 end
 
-local function DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
+function visual_transmit:DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
     if not f or not img then return end
     local rows = #img
     if rows == 0 then return end
@@ -84,13 +84,7 @@ local function DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
                 local uiY = physY / scale
                 local uiSize = blockSize / scale
 
-                local t = pool[idx]
-                if not t then
-                    t = f:CreateTexture(nil, "BACKGROUND")
-                    t:SetSnapToPixelGrid(true)
-                    if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
-                    pool[idx] = t
-                end
+                local t = self.textures[r][c]
                 t:SetColorTexture(px[1], px[2], px[3], 1)
                 if PixelUtil and PixelUtil.SetPoint and PixelUtil.SetSize then
                     PixelUtil.SetSize(t, uiSize, uiSize)
@@ -100,7 +94,6 @@ local function DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
                     t:SetPoint("TOPLEFT", f, "TOPLEFT", uiX, uiY)
                 end
                 t:Show()
-                idx = idx + 1
             end
         end
     end
@@ -132,7 +125,6 @@ end
 -- @param use_crc: 是否使用CRC8校验 (默认true)
 -- @return: RGB数据矩阵 [row][col] = {r, g, b}
 function util.bytes_to_rgb(seq_id, bytes, rows, cols)
-    print(seq_id, #bytes, rows, cols)
     -- 头部: [序列号][长度]
     local payload = {}
     -- 序列号：大端16位，拆成高8位和低8位
@@ -170,8 +162,8 @@ function util.bytes_to_rgb(seq_id, bytes, rows, cols)
         local r = payload[i] or 0
         local g = payload[i+1] or 0
         local b = payload[i+2] or 0
-        print(row, col, r,g,b)
         img[row][col] = {r, g, b}
+        print(row, col, r, g, b)
         col = col + 1
     end
     return img
@@ -181,8 +173,8 @@ end
 local DEFAULT_CONFIG = {
     anchorPoint = "TOPLEFT", -- 屏幕锚点位置
     offsetX = 10, offsetY = -10,   -- 锚点偏移
-    blocksPerRow = 32,              -- 矩阵宽度（块数）
-    blocksPerCol = 32,              -- 矩阵高度（块数）
+    blocksPerRow = 16,              -- 矩阵宽度（块数）
+    blocksPerCol = 16,              -- 矩阵高度（块数）
     pixelSize = 3,                 -- 每个块的像素大小（缩放）
     visibleToPlayer = false,       -- 是否对玩家可见；调试时设为true
     fps = 30,                      -- 期望帧率 (10..120)
@@ -259,12 +251,17 @@ function visual_transmit:SendBytes(bytes)
     local cfg = self.config
     self.sequence = (self.sequence + 1) % 65536
     local rgb_matrix = util.bytes_to_rgb(self.sequence, bytes, cfg.blocksPerRow, cfg.blocksPerCol)
-    DrawPixelImage_PxAligned(self.frame, rgb_matrix, cfg.offsetX, cfg.offsetY, cfg.pixelSize)
+    self:DrawPixelImage_PxAligned(self.frame, rgb_matrix, cfg.offsetX, cfg.offsetY, cfg.pixelSize)
 end
 
 -- 测试辅助函数
-function visual_transmit:SendRandomPayload(numBytes)
+function visual_transmit:SendRandomPayload(n)
     local bytes = {}
-    for i=1,numBytes do bytes[i] = math.random(0,255) end
+    for i=1,n do bytes[i] = math.random(0,255) end
     self:SendBytes(bytes)
+end
+
+
+function visual_transmit:Benchmark(d)
+    self:SendRandomPayload(d)
 end

@@ -91,12 +91,6 @@ function VI_Test(text)
     end
 end
 
--- 性能测试
-function VI_Benchmark(duration)
-    if visual_transmit then
-        visual_transmit:Benchmark(duration or 5)
-    end
-end
 
 -- ==================== 斜杠命令 ====================
 SLASH_VI1 = "/vi"
@@ -117,7 +111,10 @@ SlashCmdList["VI"] = function(msg)
         local text = args[2]
         VI_Test(text)
     elseif cmd == "bench" or cmd == "benchmark" then
-        local duration = tonumber(args[2]) or 5
+        local duration = tonumber(args[2]) or 5     
+        if visual_transmit then
+            visual_transmit:Benchmark(duration)
+        end
     elseif cmd == "send" then
         VI_SendCurrentState()
     elseif cmd == "watch" then
