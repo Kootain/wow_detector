@@ -118,7 +118,6 @@ SlashCmdList["VI"] = function(msg)
         VI_Test(text)
     elseif cmd == "bench" or cmd == "benchmark" then
         local duration = tonumber(args[2]) or 5
-        VI_Benchmark(duration)
     elseif cmd == "send" then
         VI_SendCurrentState()
     elseif cmd == "watch" then

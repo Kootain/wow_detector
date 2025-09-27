@@ -163,7 +163,7 @@ function visual_transmit:Configure(usercfg)
         self.config[k] = usercfg and (usercfg[k] ~= nil and usercfg[k] or v) or v 
     end
     -- 限制fps范围
-    self.config.fps = utll.clamp(self.config.fps, 10, 120)
+    self.config.fps = util.clamp(self.config.fps, 10, 120)
     make_frame()
     -- 设置OnUpdate定时器
     if self.ticker then 
