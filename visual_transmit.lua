@@ -38,15 +38,6 @@ function util.crc8(data)
     return crc
 end
 
--- XOR校验函数
-function util.xor_checksum(data)
-    local checksum = 0
-    for i = 1, #data do
-        checksum = bit.bxor(checksum, data[i])  -- XOR操作
-    end
-    return checksum
-end
-
 -- 限制数值范围
 function util.clamp(value, min, max)
     if value < min then return min end
