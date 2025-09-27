@@ -8,8 +8,100 @@ if not addonTable.visual_transmit then
 end
 local visual_transmit = addonTable.visual_transmit
 
--- 引入工具函数库
-local util = require("util")
+-- 内置工具函数（从 util.lua 复制）
+local util = {}
+
+-- CRC-8校验函数 (多项式0x07)
+function util.crc8(data)
+    local crc = 0
+    for i = 1, #data do
+        crc = crc ~ data[i]  -- XOR操作
+        for j = 1, 8 do
+            if (crc & 0x80) ~= 0 then
+                crc = ((crc << 1) ~ 0x07) & 0xFF
+            else
+                crc = (crc << 1) & 0xFF
+            end
+        end
+    end
+    return crc
+end
+
+-- XOR校验函数
+function util.xor_checksum(data)
+    local checksum = 0
+    for i = 1, #data do
+        checksum = checksum ~ data[i]  -- XOR操作
+    end
+    return checksum
+end
+
+-- 限制数值范围
+function util.clamp(value, min, max)
+    if value < min then return min end
+    if value > max then return max end
+    return value
+end
+
+-- 将bytes数组转换为RGB图像数据
+-- @param bytes: 字节数组 (0-255的整数)
+-- @param width: 图像宽度(像素块数)
+-- @param height: 图像高度(像素块数)
+-- @param use_crc: 是否使用CRC8校验 (默认true)
+-- @return: RGB数据矩阵 [row][col] = {r, g, b}
+function util.bytes_to_rgb(bytes, width, height, use_crc)
+    if use_crc == nil then use_crc = true end
+    
+    -- 构建帧数据: [长度][...bytes][校验和]
+    local frame = {}
+    frame[1] = #bytes  -- 长度字节
+    
+    -- 添加原始数据
+    for i = 1, #bytes do
+        frame[#frame + 1] = bytes[i]
+    end
+    
+    -- 计算并添加校验和
+    local checksum
+    if use_crc then
+        checksum = util.crc8(frame)
+    else
+        checksum = util.xor_checksum(frame)
+    end
+    frame[#frame + 1] = checksum
+    
+    -- 计算总容量
+    local total_blocks = width * height
+    local total_capacity = total_blocks * 3  -- 每个块3个字节(RGB)
+    
+    -- 创建完整的字节数组，不足部分填充0
+    local full_data = {}
+    for i = 1, total_capacity do
+        if i <= #frame then
+            full_data[i] = util.clamp(frame[i], 0, 255)
+        else
+            full_data[i] = 0
+        end
+    end
+    
+    -- 转换为RGB矩阵
+    local rgb_matrix = {}
+    for row = 1, height do
+        rgb_matrix[row] = {}
+        for col = 1, width do
+            local block_index = (row - 1) * width + col
+            local byte_offset = (block_index - 1) * 3
+            
+            local r = full_data[byte_offset + 1] or 0
+            local g = full_data[byte_offset + 2] or 0
+            local b = full_data[byte_offset + 3] or 0
+            
+            rgb_matrix[row][col] = {r, g, b}
+        end
+    end
+    
+    return rgb_matrix, #frame  -- 返回RGB矩阵和实际帧长度
+end
 
 -- ==================== 配置 ====================
 local DEFAULT_CONFIG = {
@@ -27,7 +119,7 @@ local DEFAULT_CONFIG = {
 local bit = bit32 or bit -- 兼容性处理
 local function clamp(v, a, b) if v < a then return a end if v > b then return b end return v end
 
--- 注意：CRC8和XOR校验函数现在使用util.lua中的实现
+-- 注意：CRC8和XOR校验函数已内置在上方的util表中
 
 -- 将整数(0..2^32-1)打包为n字节(大端序)
 local function int_to_bytes(num, n)
