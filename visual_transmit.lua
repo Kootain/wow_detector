@@ -54,6 +54,64 @@ function util.clamp(value, min, max)
     return value
 end
 
+local function DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
+    if not f or not img then return end
+    local rows = #img
+    if rows == 0 then return end
+    local cols = #img[1] or 0
+
+    local scale = f:GetEffectiveScale() or UIParent:GetEffectiveScale()
+
+    -- 把起点对齐到物理像素（整数）
+    local physStartX = math.floor(startX * scale + 0.5)
+    local physStartY = math.floor(startY * scale + 0.5)
+
+    -- 纹理池，避免重复创建
+    f.__pixelPool = f.__pixelPool or {}
+    local pool = f.__pixelPool
+    local idx = 1
+
+    for r = 1, rows do
+        for c = 1, cols do
+            local px = img[r][c]
+            if px then
+                -- 物理像素坐标（整数）
+                local physX = physStartX + (c - 1) * blockSize
+                local physY = physStartY - (r - 1) * blockSize -- TOPLEFT -> 向下是负
+
+                -- 转回 UI 单位（精确的分母为 scale）
+                local uiX = physX / scale
+                local uiY = physY / scale
+                local uiSize = blockSize / scale
+
+                local t = pool[idx]
+                if not t then
+                    t = f:CreateTexture(nil, "BACKGROUND")
+                    t:SetSnapToPixelGrid(true)
+                    if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+                    pool[idx] = t
+                end
+                t:SetColorTexture(px[1], px[2], px[3], 1)
+                if PixelUtil and PixelUtil.SetPoint and PixelUtil.SetSize then
+                    PixelUtil.SetSize(t, uiSize, uiSize)
+                    PixelUtil.SetPoint(t, "TOPLEFT", f, "TOPLEFT", uiX, uiY)
+                else
+                    t:SetSize(uiSize, uiSize)
+                    t:SetPoint("TOPLEFT", f, "TOPLEFT", uiX, uiY)
+                end
+                t:Show()
+                idx = idx + 1
+            end
+        end
+    end
+
+    -- 隐藏剩余池中多余的纹理
+    while pool[idx] do
+        pool[idx]:Hide()
+        idx = idx + 1
+    end
+end
+
 -- 将bytes数组转换为RGB图像数据
 -- @param bytes: 字节数组 (0-255的整数)
 -- @param width: 图像宽度(像素块数)
@@ -93,7 +151,6 @@ function util.bytes_to_rgb(bytes, width, height)
             local r = full_data[byte_offset + 1] or 0
             local g = full_data[byte_offset + 2] or 0
             local b = full_data[byte_offset + 3] or 0
-            
             rgb_matrix[row][col] = {r, g, b}
         end
     end
@@ -105,9 +162,9 @@ end
 local DEFAULT_CONFIG = {
     anchorPoint = "TOPLEFT", -- 屏幕锚点位置
     offsetX = 10, offsetY = -10,   -- 锚点偏移
-    blocksPerRow = 8,              -- 矩阵宽度（块数）
-    blocksPerCol = 8,              -- 矩阵高度（块数）
-    pixelSize = 1,                 -- 每个块的像素大小（缩放）
+    blocksPerRow = 32,              -- 矩阵宽度（块数）
+    blocksPerCol = 32,              -- 矩阵高度（块数）
+    pixelSize = 3,                 -- 每个块的像素大小（缩放）
     visibleToPlayer = false,       -- 是否对玩家可见；调试时设为true
     fps = 30,                      -- 期望帧率 (10..120)
     checksumMode = "crc8",         -- "none" | "xor" | "crc8"
@@ -146,7 +203,7 @@ local function make_frame()
             PixelUtil.SetPoint(t, "TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize, -((r-1)*cfg.pixelSize))   -- PixelUtil 会处理像素对齐
             PixelUtil.SetSize(t, cfg.pixelSize, cfg.pixelSize)
             if cfg.visibleToPlayer then
-                t:SetTexture(1,1,1,1)
+                t:SetTexture(0,0,0,1)
             else
                 -- 不透明的黑色纹理，确保不被游戏内容干扰
                 t:SetTexture(0,0,0,1)
@@ -193,20 +250,43 @@ function visual_transmit:SendBytes(bytes)
     payload[#payload+1] = bit.rshift(len, 8)   -- 高8位
     payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
     append_bytes(payload, bytes)
-
     local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
 
+    local rgbArray = {
+        {255, 0, 0},     -- 红
+        {255, 255, 0},   -- 黄
+        {0, 0, 255},     -- 蓝
+        {255, 0, 0},     -- 红
+        {255, 255, 0},   -- 黄
+        {0, 0, 255},     -- 蓝
+        {255, 0, 0},     -- 红
+        {255, 255, 0},   -- 黄
+        {0, 0, 255},     -- 蓝
+        {255, 0, 0},     -- 红
+        {255, 255, 0},   -- 黄
+        {0, 0, 255},     -- 蓝
+        {255, 0, 0},     -- 红
+        {255, 255, 0},   -- 黄
+        {0, 0, 255},     -- 蓝
+    }
+    img = {}
+    local n = 1
     for row = 1, cfg.blocksPerRow do
+        img[row] = {}
         for col = 1, cfg.blocksPerCol do
             local tex = self.textures[row] and self.textures[row][col]
             if tex and rgb_matrix[row] and rgb_matrix[row][col] then
-                local rgb = rgb_matrix[row][col]
-                tex:SetColorTexture(rgb[1]/255, rgb[2]/255, rgb[3]/255, 1)
+                -- local rgb = rgb_matrix[row][col]
+                local rgb = rgbArray[n%12 + 1]
+                n = n + 1
+                img[row][col] = rgb
+                -- tex:SetColorTexture(rgb[1]/255, rgb[2]/255, rgb[3]/255, 1)
             elseif tex then
-                tex:SetColorTexture(0, 0, 0, 1)
+                -- tex:SetColorTexture(0, 0, 0, 1)
             end
         end
     end
+    DrawPixelImage_PxAligned(self.frame, img, cfg.offsetX, cfg.offsetY, 3)
 end
 
 -- 测试辅助函数

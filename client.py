@@ -7,32 +7,29 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from mss import mss
 from PIL import Image
 import numpy as np
-from util import rgb_image_to_bytes
+from util import rgb_to_bytes
 
 # ----------------- 配置 -----------------
 # Lua 配置映射到 Python
-BLOCKS_X = 8
-BLOCKS_Y = 8
-PIXEL_SIZE = 1
+BLOCKS_X = 32
+BLOCKS_Y = 32
+PIXEL_SIZE = 3
 FPS = 30
-USE_CRC = True
 OFFSET_X = 10
 OFFSET_Y = 10  # Lua offsetY=-10, TOPLEFT 是左上角, 全屏模式正向偏移
 
 # 监控区域相对于全屏
 CONFIG = {
     "monitor_region": {
-        "top": OFFSET_Y +3,
-        "left": OFFSET_X +3,
-        "width": (BLOCKS_X) * PIXEL_SIZE,
-        "height": (BLOCKS_Y) * PIXEL_SIZE
+        "top": int((OFFSET_Y +3) * 1.4999),
+        "left": int((OFFSET_X +3) * 1.4999),
+        "width": int((BLOCKS_X ) * PIXEL_SIZE * 1.64999) +40,
+        "height": int((BLOCKS_Y ) * PIXEL_SIZE * 1.64999) + 40
     },
     "grid_size": BLOCKS_X,
     "cell_px": PIXEL_SIZE,
     "fps": FPS,
-    "use_crc": USE_CRC
 }
-
 
 # ----------------- 监控区域边框窗口 -----------------
 class MonitorOverlay(QWidget):
@@ -63,7 +60,7 @@ class DecoderGUI(QWidget):
     def __init__(self, config):
         super().__init__()
         self.setWindowTitle("WoW Matrix Decoder")
-        self.setGeometry(50, 50, 600, 400)  # 增加窗口宽度以容纳图像
+        self.setGeometry(200, 200, 600, 600)  # 增加窗口宽度以容纳图像
         # 窗口置顶且半透明，防止遮挡游戏像素块
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -72,7 +69,6 @@ class DecoderGUI(QWidget):
         self.monitor_region = config['monitor_region']
         self.grid_size = config['grid_size']
         self.cell_px = config['cell_px']
-        self.use_crc = config['use_crc']
 
         # UI 元素
         self.main_layout = QVBoxLayout()
@@ -121,7 +117,7 @@ class DecoderGUI(QWidget):
             image_rgb = image.convert('RGB')
             width, height = image_rgb.size
             # 放大图像以便更好地查看
-            scale_factor = min(200 // width, 200 // height, 10)  # 最大放大10倍
+            scale_factor = min(400 // width, 400 // height, 10)  # 最大放大10倍
             new_width = width * scale_factor
             new_height = height * scale_factor
             image_scaled = image_rgb.resize((new_width, new_height), Image.NEAREST)
@@ -142,14 +138,18 @@ class DecoderGUI(QWidget):
 
     def update_loop(self):
         sct = mss()
+        last = None
         while self.running:
             # 截屏游戏矩阵区域
-            sct_img = sct.grab(self.monitor_region)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
             
+            sct_img = sct.grab(self.monitor_region)  # mss截取的图像是 BGRA 格式（蓝、绿、红、透明度）
             # 解码
             try:
-                seq, payload, ok = rgb_image_to_bytes(img)
+                if last != sct_img.rgb:
+                    print(sct_img.size)
+                    last = sct_img.rgb
+                seq, payload, ok = rgb_to_bytes(sct_img.rgb)
+                
                 if seq is None:
                     info = "等待有效帧... (未检测到0xAA帧头)"
                 else:
@@ -161,7 +161,7 @@ class DecoderGUI(QWidget):
                 info = f"解码错误: {e}"
 
             # 发送信号时同时传递文本信息和图像
-            self.update_signal.emit(info, img)
+            self.update_signal.emit(info, Image.frombytes("RGB", sct_img.size, sct_img.rgb))
 
             time.sleep(1 / CONFIG['fps'])
 

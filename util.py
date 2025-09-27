@@ -47,46 +47,15 @@ def xor_checksum(data: List[int]) -> int:
         checksum ^= byte
     return checksum
 
-def rgb_to_bytes(rgb_matrix: np.ndarray) -> Tuple[int, bytes, bool]:
-    """
-    将RGB三通道矩阵转换为bytes数组
-    
-    Args:
-        rgb_matrix: 3维numpy数组，形状为(height, width, 3)
-    
-    Returns:
-        tuple: (seq_id, bytes数组 , 是否通过校验)
-    """
-    # 验证输入形状
-    if rgb_matrix.ndim != 3 or rgb_matrix.shape[2] != 3:
-        raise ValueError("输入必须是3维数组，形状为(height, width, 3)")
-    
-    # 展平数组并转换为bytes
-    flat_bytes = rgb_matrix.tobytes()
+def rgb_to_bytes(flat_bytes: bytes) -> Tuple[int, bytes, bool]:
     seq_id = int.from_bytes(flat_bytes[:2], byteorder='big')
     data_len = int.from_bytes(flat_bytes[2:4], byteorder='big')
     
-    # 计算校验值
     checksum = crc8(flat_bytes[:data_len+4])
-    
-    return seq_id, flat_bytes[4:data_len+4], checksum == flat_bytes[-1]
+    given = flat_bytes[data_len+4:data_len+5]
+    return seq_id, flat_bytes[4:data_len+4], bytes([checksum]) == given
 
 
-
-def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[int, bytes, bool]:
-    """
-    将PIL图像转换为bytes数组
-    
-    Args:
-        image: PIL图像对象
-        use_crc: 是否使用CRC8校验
-    
-    Returns:
-        tuple: (bytes数组, 校验是否通过, 状态信息)
-    """
-    # 转换为numpy数组
-    rgb_array = np.array(image.convert("RGB"))
-    return rgb_to_bytes(rgb_array)
 
 def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     
