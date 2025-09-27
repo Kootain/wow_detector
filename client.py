@@ -34,7 +34,7 @@ CONFIG = {
 }
 
 # ----------------- 解码函数 -----------------
-def decode_matrix(img, grid_size, cell_px, use_crc=False):
+def decode_matrix(img):
     """
     使用util.py中的方法解析图像数据
     
@@ -48,13 +48,8 @@ def decode_matrix(img, grid_size, cell_px, use_crc=False):
         tuple: (seq, payload, ok) - 为了兼容原有接口
                seq始终为None（新格式不使用序列号）
     """
-    # 使用util.py的方法解析（格式：长度+数据+校验）
-    decoded_bytes, checksum_ok, status = rgb_image_to_bytes(img, use_crc)
+    seq_id, data, checksume = rgb_image_to_bytes(img)
     
-    if decoded_bytes is not None:
-        return None, decoded_bytes, checksum_ok
-    else:
-        return None, None, False
 
 # ----------------- 监控区域边框窗口 -----------------
 class MonitorOverlay(QWidget):
@@ -171,7 +166,7 @@ class DecoderGUI(QWidget):
             
             # 解码
             try:
-                seq, payload, ok = decode_matrix(img, self.grid_size, self.cell_px, self.use_crc)
+                seq, payload, ok = rgb_image_to_bytes(img)
                 if seq is None:
                     info = "等待有效帧... (未检测到0xAA帧头)"
                 else:

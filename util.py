@@ -47,62 +47,31 @@ def xor_checksum(data: List[int]) -> int:
         checksum ^= byte
     return checksum
 
-def rgb_to_bytes(rgb_matrix: np.ndarray, use_crc: bool = True) -> Tuple[Optional[List[int]], bool, str]:
+def rgb_to_bytes(rgb_matrix: np.ndarray) -> Tuple[int, bytes, bool]:
     """
-    将RGB图像矩阵反解成bytes数组
+    将RGB三通道矩阵转换为bytes数组
     
     Args:
-        rgb_matrix: RGB矩阵 [height, width, 3]
-        use_crc: 是否使用CRC8校验 (默认True)
+        rgb_matrix: 3维numpy数组，形状为(height, width, 3)
     
     Returns:
-        tuple: (bytes数组, 校验是否通过, 状态信息)
+        tuple: (seq_id, bytes数组 , 是否通过校验)
     """
-    try:
-        height, width, channels = rgb_matrix.shape
-        if channels != 3:
-            return None, False, f"错误: 期望3通道RGB图像，实际{channels}通道"
-        
-        # 提取所有字节数据
-        raw_bytes = []
-        for row in range(height):
-            for col in range(width):
-                r, g, b = rgb_matrix[row, col]
-                raw_bytes.extend([int(r), int(g), int(b)])
-        
-        # 检查最小长度 (至少需要: 长度字节 + 校验和)
-        if len(raw_bytes) < 2:
-            return None, False, "错误: 数据长度不足"
-        
-        # 读取长度字节
-        data_length = raw_bytes[0]
-        
-        # 检查是否有足够的数据
-        required_length = 1 + data_length + 1  # 长度字节 + 数据 + 校验和
-        if len(raw_bytes) < required_length:
-            return None, False, f"错误: 数据不足，需要{required_length}字节，实际{len(raw_bytes)}字节"
-        
-        # 提取数据和校验和
-        payload = raw_bytes[1:1+data_length]
-        received_checksum = raw_bytes[1+data_length]
-        
-        # 验证校验和
-        frame_data = raw_bytes[0:1+data_length]  # 长度字节 + 数据
-        if use_crc:
-            calculated_checksum = crc8(frame_data)
-        else:
-            calculated_checksum = xor_checksum(frame_data)
-        
-        checksum_ok = (calculated_checksum == received_checksum)
-        
-        status = f"长度: {data_length}, 校验: {'✅通过' if checksum_ok else '❌失败'} (计算值: 0x{calculated_checksum:02X}, 接收值: 0x{received_checksum:02X})"
-        
-        return payload, checksum_ok, status
-        
-    except Exception as e:
-        return None, False, f"解析错误: {str(e)}"
+    # 验证输入形状
+    if rgb_matrix.ndim != 3 or rgb_matrix.shape[2] != 3:
+        raise ValueError("输入必须是3维数组，形状为(height, width, 3)")
+    
+    # 展平数组并转换为bytes
+    flat_bytes = rgb_matrix.tobytes()
+    
+    # 计算校验值
+    checksum = crc8(flat_bytes[:-1])
+    
+    return 0, flat_bytes[:-1], checksum == flat_bytes[-1]
 
-def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[Optional[List[int]], bool, str]:
+
+
+def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[int, bytes, bool]:
     """
     将PIL图像转换为bytes数组
     
@@ -115,7 +84,7 @@ def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[Option
     """
     # 转换为numpy数组
     rgb_array = np.array(image.convert("RGB"))
-    return rgb_to_bytes(rgb_array, use_crc)
+    return rgb_to_bytes(rgb_array)
 
 def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     
