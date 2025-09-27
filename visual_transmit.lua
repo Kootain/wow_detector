@@ -93,7 +93,6 @@ function util.bytes_to_rgb(bytes, width, height)
             local r = full_data[byte_offset + 1] or 0
             local g = full_data[byte_offset + 2] or 0
             local b = full_data[byte_offset + 3] or 0
-            print(r, g, b)
             
             rgb_matrix[row][col] = {r, g, b}
         end
@@ -195,7 +194,7 @@ function visual_transmit:SendBytes(bytes)
     payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
     append_bytes(payload, bytes)
 
-    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerCol, cfg.blocksPerRow)
+    local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
 
     -- 绘制RGB矩阵到纹理
     for row = 1, cfg.blocksPerRow do
