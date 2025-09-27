@@ -22,10 +22,10 @@ OFFSET_Y = 10  # Lua offsetY=-10, TOPLEFT 是左上角, 全屏模式正向偏移
 # 监控区域相对于全屏
 CONFIG = {
     "monitor_region": {
-        "top": OFFSET_Y + 2,
-        "left": OFFSET_X + 3,
-        "width": (BLOCKS_X + 2) * PIXEL_SIZE,
-        "height": (BLOCKS_Y + 2) * PIXEL_SIZE
+        "top": OFFSET_Y +3,
+        "left": OFFSET_X +3,
+        "width": (BLOCKS_X) * PIXEL_SIZE,
+        "height": (BLOCKS_Y) * PIXEL_SIZE
     },
     "grid_size": BLOCKS_X,
     "cell_px": PIXEL_SIZE,

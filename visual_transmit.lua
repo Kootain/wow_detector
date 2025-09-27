@@ -119,6 +119,7 @@ visual_transmit.frame = nil
 visual_transmit.textures = {} -- 扁平化的 [row][col] => texture
 visual_transmit.sequence = 0
 
+
 -- 创建显示框架
 local function make_frame()
     local cfg = visual_transmit.config
@@ -142,9 +143,8 @@ local function make_frame()
         visual_transmit.textures[r] = {}
         for c=1,cfg.blocksPerCol do
             local t = f:CreateTexture(nil, "BACKGROUND")
-            t:SetPoint("TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize, -((r-1)*cfg.pixelSize))
-            t:SetSize(cfg.pixelSize, cfg.pixelSize)
-            t:SetDrawLayer("BACKGROUND")
+            PixelUtil.SetPoint(t, "TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize, -((r-1)*cfg.pixelSize))   -- PixelUtil 会处理像素对齐
+            PixelUtil.SetSize(t, cfg.pixelSize, cfg.pixelSize)
             if cfg.visibleToPlayer then
                 t:SetTexture(1,1,1,1)
             else
@@ -195,7 +195,13 @@ function visual_transmit:SendBytes(bytes)
     append_bytes(payload, bytes)
 
     local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
-
+    local img = {
+        { {1,0,0}, {0,1,0} },   -- 第一行：红、绿
+        { {0,0,1}, {1,1,1} },   -- 第二行：蓝、白
+        { {1,0,0}, {0,1,0} },   -- 第一行：红、绿
+        { {0,0,1}, {1,1,1} },   -- 第二行：蓝、白
+    }
+    -- DrawPixelImage_PxAligned(self.frame, img, 0, 0)
     -- 绘制RGB矩阵到纹理
     for row = 1, cfg.blocksPerRow do
         for col = 1, cfg.blocksPerCol do
