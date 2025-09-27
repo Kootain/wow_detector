@@ -256,3 +256,39 @@ end
 function visual_transmit:Benchmark(d)
     self:SendRandomPayload(d)
 end
+
+-- ==================== 核心功能：捕捉并打印鼠标坐标 ====================
+local function PrintMouseCoord()
+    -- 1. 获取鼠标坐标（屏幕单位，左下角为 (0,0)）
+    local mouseX, mouseY = GetCursorPosition()
+    
+    -- 2. 坐标格式化（保留 2 位小数，避免数值过长）
+    local formattedX = string.format("%.2f", mouseX)
+    local formattedY = string.format("%.2f", mouseY)
+    
+    -- 3. 打印到聊天框（绿色字体，区分系统消息）
+    print("|cff00ff00[鼠标坐标]|r X: " .. formattedX .. " | Y: " .. formattedY)
+end
+
+
+-- ==================== 可选功能：实时追踪（每 0.5 秒更新一次） ====================
+-- 注释：取消下方代码的 "--" 可开启实时追踪，移动鼠标时坐标自动更新
+local updateInterval = 0.5  -- 更新间隔（秒）
+local lastUpdateTime = 0     -- 上次更新时间
+
+-- 帧更新函数（游戏每帧调用，控制更新频率）
+local function OnUpdate(self, elapsed)
+    lastUpdateTime = lastUpdateTime + elapsed
+    -- 达到间隔时间后更新坐标
+    if lastUpdateTime >= updateInterval then
+        PrintMouseCoord()
+        lastUpdateTime = 0  -- 重置计时
+    end
+end
+
+-- 创建隐藏帧，用于触发 OnUpdate 函数
+local coordFrame = CreateFrame("Frame")
+coordFrame:SetScript("OnUpdate", OnUpdate)
+
+-- ==================== 插件加载提示 ====================
+print("|cff00ff00[鼠标坐标插件]|r 已加载！输入 /mcoord 打印当前坐标")
