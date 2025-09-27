@@ -3,7 +3,7 @@ import time
 import threading
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit, QHBoxLayout
 from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap
-from PyQt6.QtCore import Qt, pyqtSignal, QRect
+from PyQt6.QtCore import Qt, pyqtSignal
 from mss import mss
 from PIL import Image
 import numpy as np
@@ -21,10 +21,10 @@ OFFSET_Y = 10  # Lua offsetY=-10, TOPLEFT 是左上角, 全屏模式正向偏移
 # 监控区域相对于全屏
 CONFIG = {
     "monitor_region": {
-        "top": OFFSET_Y+1,
-        "left": OFFSET_X+1,
-        "width": BLOCKS_X * PIXEL_SIZE + 1,
-        "height": BLOCKS_Y * PIXEL_SIZE + 1
+        "top": OFFSET_Y,
+        "left": OFFSET_X,
+        "width": BLOCKS_X * PIXEL_SIZE,
+        "height": BLOCKS_Y * PIXEL_SIZE
     },
     "grid_size": BLOCKS_X,
     "cell_px": PIXEL_SIZE,
@@ -103,21 +103,7 @@ class MonitorOverlay(QWidget):
             monitor_region['width'] + 4,
             monitor_region['height'] + 4
         )
-        
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 设置边框样式：红色，2像素宽
-        pen = QPen(QColor(255, 0, 0, 200))  # 红色，半透明
-        pen.setWidth(2)
-        painter.setPen(pen)
-        
-        # 绘制边框矩形
-        rect = QRect(1, 1, self.width() - 2, self.height() - 2)
-        painter.drawRect(rect)
-        
-        painter.end()
+
 
 # ----------------- GUI -----------------
 class DecoderGUI(QWidget):
