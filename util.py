@@ -119,11 +119,9 @@ def rgb_image_to_bytes(image: Image.Image, use_crc: bool = True) -> Tuple[Option
 
 def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     
-    # 用2字节表示seq，2字节表示数据长度（大端序），再拼接数据
-    # seq_bytes = seq.to_bytes(2, byteorder='big')
-    # len_bytes = len(data).to_bytes(2, byteorder='big')
-    # data = seq_bytes + len_bytes + data
-    data = bytes([seq, len(data)]) + data
+    seq_bytes = seq.to_bytes(2, byteorder='big')
+    len_bytes = len(data).to_bytes(2, byteorder='big')
+    data = seq_bytes + len_bytes + data
     crc_checksum = crc8(data)
     data += bytes([crc_checksum])
 
@@ -150,7 +148,7 @@ def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
 
 if __name__ == "__main__":
     # 示例：将字节数据转为RGB图像并展示
-    sample_data = b'2va3n'
-    seq = 8
+    sample_data = b'Qdkne'
+    seq = 213
     img = bytes_to_rgb(seq, sample_data, 8, 8)
     img.show()

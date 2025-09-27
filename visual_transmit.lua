@@ -200,8 +200,13 @@ function visual_transmit:SendBytes(bytes)
 
     -- 头部: [0xAA标记][序列号][长度]
     local payload = {}
-    payload[#payload+1] = self.sequence
-    payload[#payload+1] = #bytes
+    -- 序列号：大端16位，拆成高8位和低8位
+    payload[#payload+1] = bit.rshift(self.sequence, 8)
+    payload[#payload+1] = bit.band(self.sequence, 0xFF)
+    -- 长度：大端16位，拆成高8位和低8位
+    local len = #bytes
+    payload[#payload+1] = bit.rshift(len, 8)   -- 高8位
+    payload[#payload+1] = bit.band(len, 0xFF)  -- 低8位
     append_bytes(payload, bytes)
 
     local rgb_matrix = util.bytes_to_rgb(payload, cfg.blocksPerRow, cfg.blocksPerCol)
