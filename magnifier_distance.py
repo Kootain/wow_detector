@@ -9,11 +9,10 @@ import mss
 import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTextEdit, QGroupBox
+    QLabel, QPushButton, QTextEdit, QGroupBox, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QCursor
-from pynput import mouse
 
 class MagnifierApp(QMainWindow):
     def __init__(self):
@@ -35,11 +34,15 @@ class MagnifierApp(QMainWindow):
         self.points = []  # 存储选择的两个点
         self.selecting = False
         
+        # 虚拟光标位置
+        cursor_pos = QCursor.pos()
+        self.virtual_cursor_x = cursor_pos.x()
+        self.virtual_cursor_y = cursor_pos.y()
+        
         # 屏幕截图对象
         self.sct = mss.mss()
         
-        # 全局鼠标监听器
-        self.mouse_listener = None
+        # 移除鼠标监听器，改用按钮控制
         
         # 创建界面
         self.create_widgets()
@@ -78,12 +81,81 @@ class MagnifierApp(QMainWindow):
         self.pos_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.pos_label)
         
+        # 方向控制按钮
+        direction_group = QGroupBox("方向控制")
+        direction_layout = QVBoxLayout(direction_group)
+        
+        # 上按钮
+        up_layout = QHBoxLayout()
+        up_layout.addStretch()
+        self.up_btn = QPushButton("↑")
+        self.up_btn.setFixedSize(40, 40)
+        self.up_btn.clicked.connect(self.move_up)
+        up_layout.addWidget(self.up_btn)
+        up_layout.addStretch()
+        direction_layout.addLayout(up_layout)
+        
+        # 左右按钮
+        middle_layout = QHBoxLayout()
+        self.left_btn = QPushButton("←")
+        self.left_btn.setFixedSize(40, 40)
+        self.left_btn.clicked.connect(self.move_left)
+        middle_layout.addWidget(self.left_btn)
+        
+        middle_layout.addStretch()
+        
+        self.right_btn = QPushButton("→")
+        self.right_btn.setFixedSize(40, 40)
+        self.right_btn.clicked.connect(self.move_right)
+        middle_layout.addWidget(self.right_btn)
+        direction_layout.addLayout(middle_layout)
+        
+        # 下按钮
+        down_layout = QHBoxLayout()
+        down_layout.addStretch()
+        self.down_btn = QPushButton("↓")
+        self.down_btn.setFixedSize(40, 40)
+        self.down_btn.clicked.connect(self.move_down)
+        down_layout.addWidget(self.down_btn)
+        down_layout.addStretch()
+        direction_layout.addLayout(down_layout)
+        
+        main_layout.addWidget(direction_group)
+        
+        # 坐标输入组
+        coord_group = QGroupBox("坐标跳转")
+        coord_layout = QVBoxLayout(coord_group)
+        
+        # 坐标输入行
+        coord_input_layout = QHBoxLayout()
+        coord_input_layout.addWidget(QLabel("X:"))
+        self.x_input = QLineEdit()
+        self.x_input.setPlaceholderText("输入X坐标")
+        coord_input_layout.addWidget(self.x_input)
+        
+        coord_input_layout.addWidget(QLabel("Y:"))
+        self.y_input = QLineEdit()
+        self.y_input.setPlaceholderText("输入Y坐标")
+        coord_input_layout.addWidget(self.y_input)
+        
+        self.jump_btn = QPushButton("跳转")
+        self.jump_btn.clicked.connect(self.jump_to_coordinate)
+        coord_input_layout.addWidget(self.jump_btn)
+        
+        coord_layout.addLayout(coord_input_layout)
+        main_layout.addWidget(coord_group)
+        
         # 控制按钮
         button_layout = QHBoxLayout()
         
         self.start_btn = QPushButton("开始选择点")
         self.start_btn.clicked.connect(self.start_selection)
         button_layout.addWidget(self.start_btn)
+        
+        self.select_point_btn = QPushButton("选择当前点")
+        self.select_point_btn.clicked.connect(self.select_current_point)
+        self.select_point_btn.setEnabled(False)
+        button_layout.addWidget(self.select_point_btn)
         
         self.clear_btn = QPushButton("清除点")
         self.clear_btn.clicked.connect(self.clear_points)
@@ -101,56 +173,83 @@ class MagnifierApp(QMainWindow):
         
         main_layout.addWidget(result_group)
     
+    def move_up(self):
+        """向上移动虚拟光标"""
+        self.virtual_cursor_y -= 1
+    
+    def move_down(self):
+        """向下移动虚拟光标"""
+        self.virtual_cursor_y += 1
+    
+    def move_left(self):
+        """向左移动虚拟光标"""
+        self.virtual_cursor_x -= 1
+    
+    def move_right(self):
+        """向右移动虚拟光标"""
+        self.virtual_cursor_x += 1
+    
+    def jump_to_coordinate(self):
+        """跳转到指定坐标"""
+        try:
+            x = int(self.x_input.text())
+            y = int(self.y_input.text())
+            
+            # 更新虚拟光标位置
+            self.virtual_cursor_x = x
+            self.virtual_cursor_y = y
+            
+            # 清空输入框
+            self.x_input.clear()
+            self.y_input.clear()
+            
+        except ValueError:
+            # 如果输入不是有效数字，忽略
+            pass
+    
     def start_selection(self):
         """开始选择点"""
         self.selecting = True
         self.points.clear()
-        self.start_btn.setText("选择中... (左击选择点)")
+        self.start_btn.setText("选择中...")
         self.start_btn.setEnabled(False)
+        self.select_point_btn.setEnabled(True)
         self.result_text.clear()
-        self.result_text.append("请在屏幕上左击选择第一个点...")
-        
-        # 启动全局鼠标监听器
-        if self.mouse_listener:
-            self.mouse_listener.stop()
-        self.mouse_listener = mouse.Listener(on_click=self.on_global_click)
-        self.mouse_listener.start()
+        self.result_text.append("请使用方向键移动到第一个点，然后点击'选择当前点'...")
         
     def clear_points(self):
         """清除选择的点"""
-        self.points.clear()
+        self.points = []
         self.selecting = False
         self.start_btn.setText("开始选择点")
         self.start_btn.setEnabled(True)
+        self.select_point_btn.setEnabled(False)
         self.result_text.clear()
-        
-        # 停止全局鼠标监听器
-        if self.mouse_listener:
-            self.mouse_listener.stop()
-            self.mouse_listener = None
     
-    def on_global_click(self, x, y, button, pressed):
-        """处理全局鼠标点击事件"""
-        if not self.selecting or button != mouse.Button.left or not pressed:
+    def select_current_point(self):
+        """选择当前虚拟光标位置的点"""
+        if not self.selecting:
             return
-            
+        
+        x, y = self.virtual_cursor_x, self.virtual_cursor_y
         self.points.append((x, y))
         
         if len(self.points) == 1:
             self.result_text.append(f"第一个点: ({x}, {y})")
-            self.result_text.append("请左击选择第二个点...")
+            self.result_text.append("请移动到第二个点，然后点击'选择当前点'...")
         elif len(self.points) == 2:
             self.result_text.append(f"第二个点: ({x}, {y})")
-            self.result_text.append("")
+            
+            # 计算距离
             self.calculate_distance()
+            
+            # 重置状态
             self.selecting = False
             self.start_btn.setText("开始选择点")
             self.start_btn.setEnabled(True)
-            
-            # 停止监听器
-            if self.mouse_listener:
-                self.mouse_listener.stop()
-                self.mouse_listener = None
+            self.select_point_btn.setEnabled(False)
+    
+
     
     def calculate_distance(self):
         """计算两点间的距离"""
@@ -205,18 +304,16 @@ class MagnifierApp(QMainWindow):
     def update_magnifier(self):
         """更新放大镜显示"""
         try:
-            # 获取鼠标位置
-            cursor_pos = QCursor.pos()
-            mouse_x = cursor_pos.x()
-            mouse_y = cursor_pos.y()
+            # 使用虚拟光标位置
+            x, y = self.virtual_cursor_x, self.virtual_cursor_y
             
             # 更新位置标签
-            self.pos_label.setText(f"鼠标位置: ({mouse_x}, {mouse_y})")
+            self.pos_label.setText(f"位置: ({x}, {y})")
             
             # 计算截图区域
             half_size = self.capture_size // 2
-            left = mouse_x - half_size
-            top = mouse_y - half_size
+            left = x - half_size
+            top = y - half_size
             
             # 截图
             monitor = {"top": top, "left": left, "width": self.capture_size, "height": self.capture_size}
@@ -252,9 +349,7 @@ class MagnifierApp(QMainWindow):
             print(f"更新放大镜时出错: {e}")
     
     def closeEvent(self, event):
-        """关闭程序时清理资源"""
-        if self.mouse_listener:
-            self.mouse_listener.stop()
+        """程序关闭时的清理工作"""
         event.accept()
     
     def run(self):
