@@ -307,8 +307,7 @@ class MagnifierApp(QMainWindow):
             # 使用虚拟光标位置
             x, y = self.virtual_cursor_x, self.virtual_cursor_y
             
-            # 更新位置标签
-            self.pos_label.setText(f"位置: ({x}, {y})")
+    
             
             # 计算截图区域
             half_size = self.capture_size // 2
@@ -321,6 +320,7 @@ class MagnifierApp(QMainWindow):
             
             # 转换为PIL图像
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+            self.pos_label.setText(f"位置: ({x}, {y}) RGB: {img.getpixel((50, 50))}")
             
             # 放大图像
             new_size = (img.width * self.zoom_factor, img.height * self.zoom_factor)
@@ -341,7 +341,7 @@ class MagnifierApp(QMainWindow):
             painter.drawLine(center_x - 10, center_y, center_x + 10, center_y)
             painter.drawLine(center_x, center_y - 10, center_x, center_y + 10)
             painter.end()
-            
+
             # 更新显示
             self.magnifier_label.setPixmap(pixmap)
             

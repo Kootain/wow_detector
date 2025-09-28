@@ -13,10 +13,83 @@ state_encoder.pollInterval = 0.1 -- 轮询间隔（秒）
 state_encoder.lastPoll = 0
 state_encoder.lastSendTime = 0
 state_encoder.cachedBytes = {}
-state_encoder.watchSpells = {} -- 监控的技能列表
-state_encoder.visual_transmit = nil -- 视觉传输模块引用
+state_encoder.watchSpells = {
+    "奥术冲击",
+    "奥术弹幕",
+    "奥术飞弹",
+    "奥术涌动"
+} -- 监控的技能列表
+state_encoder.pixel_drawer = nil -- 视觉传输模块引用
 
 -- ==================== 工具函数 ====================
+
+local function string_to_bytes(s)
+    local bytes = {}
+    for i = 1, #s do
+        table.insert(bytes, string.byte(s, i))
+    end
+    return bytes
+end
+
+-- json.lua - minimal JSON encoder for WoW addons
+local json = {}
+
+-- escape字符串中的特殊字符
+local function escape_str(s)
+    s = s:gsub('\\', '\\\\')
+    s = s:gsub('"', '\\"')
+    s = s:gsub('\n', '\\n')
+    s = s:gsub('\r', '\\r')
+    s = s:gsub('\t', '\\t')
+    return '"' .. s .. '"'
+end
+
+-- 判断类型并编码
+local function encode_value(v)
+    local t = type(v)
+    if t == "nil" then
+        return "null"
+    elseif t == "boolean" then
+        return v and "true" or "false"
+    elseif t == "number" then
+        return tostring(v)
+    elseif t == "string" then
+        return escape_str(v)
+    elseif t == "table" then
+        -- 判断是数组还是对象
+        local isArray = true
+        local maxIndex = 0
+        for k,v2 in pairs(v) do
+            if type(k) ~= "number" then
+                isArray = false
+                break
+            else
+                if k > maxIndex then maxIndex = k end
+            end
+        end
+
+        if isArray then
+            local items = {}
+            for i=1,maxIndex do
+                items[#items+1] = encode_value(v[i])
+            end
+            return "[" .. table.concat(items, ",") .. "]"
+        else
+            local items = {}
+            for k,v2 in pairs(v) do
+                items[#items+1] = escape_str(k) .. ":" .. encode_value(v2)
+            end
+            return "{" .. table.concat(items, ",") .. "}"
+        end
+    else
+        return '""'
+    end
+end
+
+function json.encode(tbl)
+    return encode_value(tbl)
+end
+
 local bit = bit32 or bit -- 兼容性处理
 
 -- 获取当前时间（毫秒）
@@ -46,28 +119,35 @@ local function clamp(v, a, b)
     return v 
 end
 
+local UnitAura = UnitAura
+if UnitAura == nil then
+  --- Deprecated in 10.2.5
+  UnitAura = function(unitToken, index, filter)
+		local auraData = C_UnitAuras.GetAuraDataByIndex(unitToken, index, filter)
+		if not auraData then
+			return nil;
+		end
+
+		return auraData
+	end
+end
+
+
 -- ==================== 光环信息获取 ====================
 -- 获取光环信息（兼容不同版本的API）
 local function get_aura_info(unit, index, filter)
     -- 返回包含以下键的表：spellId, stackCount/stacks, expirationTime, duration
-    if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex and filter == "HELPFUL" then
-        local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, C_UnitAuras, unit, index)
-        if ok and aura and aura.spellId then
+    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+        local aura = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
+        if aura and aura.spellId then
+           
             return {
                 spellID = aura.spellId,
-                stacks = aura.stackCount or aura.count or 0,
+                stacks = aura.applications or aura.count or 0,
                 expirationTime = aura.expirationTime or 0,
                 duration = aura.duration or 0,
-            }
-        end
-    elseif C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, C_UnitAuras, unit, index, filter)
-        if ok and aura and aura.spellId then
-            return {
-                spellID = aura.spellId,
-                stacks = aura.stackCount or aura.count or 0,
-                expirationTime = aura.expirationTime or 0,
-                duration = aura.duration or 0,
+                name = aura.name,
+                iocn = aura.icon
             }
         end
     else
@@ -78,7 +158,9 @@ local function get_aura_info(unit, index, filter)
                 spellID = spellId or 0, 
                 stacks = count or 0, 
                 expirationTime = expirationTime or 0, 
-                duration = duration or 0 
+                duration = duration or 0,
+                name = name,
+                iocn = aura.icon
             }
         end
     end
@@ -97,9 +179,11 @@ local function collect_buffs(unit)
             remaining = math.max(0, math.floor((info.expirationTime - GetTime())*1000))
         end
         out[#out+1] = {
-            spellID = info.spellID or 0, 
+            spell_id = info.spellID or 0, 
             stacks = info.stacks or 0, 
-            remaining_ms = remaining
+            remaining_ms = remaining,
+            name = info.name,
+            icon = info.iocn
         }
     end
     return out
@@ -116,9 +200,11 @@ local function collect_debuffs(unit)
             remaining = math.max(0, math.floor((info.expirationTime - GetTime())*1000))
         end
         out[#out+1] = {
-            spellID = info.spellID or 0, 
-            stacks = info.stacks or 0, 
-            remaining_ms = remaining
+            spell_id = info.spellID or 0, 
+            stacks = info.stacks or 0,
+            remaining_ms = remaining,
+            name = info.name,
+            icon = info.iocn
         }
     end
     return out
@@ -144,14 +230,17 @@ end
 local function collect_cooldowns()
     local out = {}
     for i,spell in ipairs(state_encoder.watchSpells) do
-        local cooldownInfo = C_Spell.GetSpellCooldown(spell)
+        local info = C_Spell.GetSpellInfo(spell)
+        local cooldownInfo = C_Spell.GetSpellCooldown(info.spellID)
         local ready_in = 0
-        if cooldownInfo and cooldownInfo.isEnabled and cooldownInfo.duration and cooldownInfo.duration > 1.5 then
+        if cooldownInfo and cooldownInfo.isEnabled and cooldownInfo.duration then
             -- 返回剩余毫秒数
             ready_in = math.max(0, math.floor((cooldownInfo.startTime + cooldownInfo.duration - GetTime()) * 1000))
         end
         out[#out+1] = {
-            spell = spell, 
+            spell_id = info.spellID,
+            name = info.name,
+            icon = info.iconID,
             remaining_ms = ready_in
         }
     end
@@ -161,23 +250,30 @@ end
 -- ==================== 施法信息收集 ====================
 -- 收集施法/引导信息
 local function collect_casting()
-    local name, _, _, startTime, endTime, _, castID, notInterruptible = UnitCastingInfo("player")
-    if name then
+    local spell, _, icon, startTime, endTime, _, _, interruptible, spellId = UnitCastingInfo("player")
+    if spell then
         -- startTime和endTime以毫秒返回
         return {
             type = "cast", 
-            name = name, 
-            start_ms = startTime, 
-            end_ms = endTime
+            name = spell, 
+            start_ms = startTime,
+            end_ms = endTime,
+            spell_id = spellId,
+            icon = icon,
+            remaining_ms = math.max(0, (endTime - GetTime()*1000)),
         }
     end
-    local ch_name, _, _, ch_start, ch_end = UnitChannelInfo("player")
-    if ch_name then
+    -- local ch_name, _, _, ch_start, ch_end = UnitChannelInfo("player")
+    local name, text, texture, startTime, endTime, isTradeSkill, notInterruptible, spellID, _, numStages = UnitChannelInfo("player")
+    if name then
         return {
             type = "channel", 
-            name = ch_name, 
-            start_ms = ch_start, 
-            end_ms = ch_end
+            name = name, 
+            start_ms = startTime, 
+            end_ms = endTime,
+            spell_id = spellID,
+            icon = texture,
+            remaining_ms = math.max(0, (endTime - GetTime()*1000)),
         }
     end
     return nil
@@ -266,10 +362,48 @@ local function serialize_state()
     return bytes
 end
 
+-- ==================== 状态序列化 ====================
+-- JSON 格式输出
+local function serialize_state_json()
+    local state = {}
+
+    -- 资源
+    local res = collect_resources("player")
+    state.resources = {
+        hp = res.hp,
+        hpmax = res.hpmax,
+        mp = res.mp,
+        mpmax = res.mpmax,
+        hp_pct = res.hpmax > 0 and res.hp / res.hpmax or 0,
+        mp_pct = res.mpmax > 0 and res.mp / res.mpmax or 0,
+    }
+
+    -- buffs
+    local buffs = collect_buffs("player")
+    state.buffs = buffs
+
+    -- debuffs
+    local debuffs = collect_debuffs("player")
+    state.debuffs = debuffs
+
+    -- 冷却
+    local cds = collect_cooldowns()
+    state.cooldowns = cds
+
+    -- 施法
+    local cast = collect_casting()
+    if cast then
+        state.casting = cast
+    end
+
+    return state
+end
+
+
 -- ==================== 公共接口 ====================
 -- 设置视觉传输模块引用
-function state_encoder:SetVisualTransmit(visual_transmit_module)
-    self.visual_transmit = visual_transmit_module
+function state_encoder:SetVisualTransmit(pixel_drawer_module)
+    self.pixel_drawer = pixel_drawer_module
 end
 
 -- 注册监控技能
@@ -289,7 +423,7 @@ function state_encoder:OnUpdate(elapsed)
     self.lastPoll = 0
 
     local now = GetTime()
-    local vi = self.visual_transmit
+    local vi = self.pixel_drawer
     if not vi or not vi.config then return end
     
     local minInterval = 1 / vi.config.fps
@@ -297,9 +431,15 @@ function state_encoder:OnUpdate(elapsed)
         return
     end
 
-    local bytes = serialize_state()
-    if vi.SendBytes then
-        vi:SendBytes(bytes)
+    -- local bytes = serialize_state()
+    -- if vi.Output then
+    --     vi:Output(bytes)
+    -- end
+    local bytes = serialize_state_json()
+    local data = json.encode(bytes)
+
+    if vi.Output then
+        vi:Output(string_to_bytes(data))
     end
     self.lastSendTime = now
 end
@@ -307,8 +447,8 @@ end
 -- 手动发送当前状态
 function state_encoder:SendCurrentState()
     local bytes = serialize_state()
-    if self.visual_transmit and self.visual_transmit.SendBytes then
-        self.visual_transmit:SendBytes(bytes)
+    if self.pixel_drawer and self.pixel_drawer.Output then
+        self.pixel_drawer:Output(bytes)
     end
 end
 

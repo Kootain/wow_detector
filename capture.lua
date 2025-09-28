@@ -7,33 +7,30 @@
 -- ==================== 模块加载 ====================
 -- 获取插件参数和模块引用
 local addonName, addonTable = ...
-local visual_transmit = addonTable.visual_transmit
 local state_encoder = addonTable.state_encoder
+local pixel_drawer = addonTable.pixel_drawer
+
 
 -- ==================== 模块集成 ====================
 -- 将视觉传输模块引用传递给状态编码模块
-state_encoder:SetVisualTransmit(visual_transmit)
+state_encoder:SetVisualTransmit(pixel_drawer)
 
 -- 创建主更新框架
 local fMain = CreateFrame("Frame", "VI_MainFrame")
 fMain.elapsed = 0
-fMain:SetScript("OnUpdate", function(self, elapsed)
-    state_encoder:OnUpdate(elapsed)
-end)
+
 
 -- ==================== 公共API ====================
 -- 主要配置和启动函数
 function StartVI(usercfg)
-    -- 配置视觉传输模块
-    visual_transmit:Configure(usercfg)
+    pixel_drawer:Configure(nil)
+    pixel_drawer.on = true
     
     -- 清空并设置默认监控技能（用户可以自定义）
-    state_encoder:ClearWatchSpells()
-    -- 示例：添加一些常用技能监控
-    -- state_encoder:RegisterWatchSpell(116) -- 火球术示例
-    -- state_encoder:RegisterWatchSpell("Fireball") -- 也可以使用技能名称
-    
-    print("VI started with matrix "..visual_transmit.config.blocksPerRow.."x"..visual_transmit.config.blocksPerCol.." @"..visual_transmit.config.fps.."fps")
+    -- state_encoder:ClearWatchSpells()
+    fMain:SetScript("OnUpdate", function(self, elapsed)
+        state_encoder:OnUpdate(elapsed)
+    end)
 end
 
 -- 停止插件
@@ -41,13 +38,9 @@ function StopVI()
     if fMain then
         fMain:SetScript("OnUpdate", nil)
     end
-    if visual_transmit and visual_transmit.ticker then
-        visual_transmit.ticker:Cancel()
-        visual_transmit.ticker = nil
+    if pixel_drawer then
+        pixel_drawer.on = false
     end
-    -- if visual_transmit and visual_transmit.frame then
-    --     visual_transmit.frame:Hide()
-    -- end
     print("VI stopped")
 end
 
@@ -77,7 +70,7 @@ end
 
 -- 测试函数
 function VI_Test(text)
-    if visual_transmit then
+    if pixel_drawer then
         -- 在聊天界面输出随机字符串
         print("Generated random string " .. text)
         
@@ -86,7 +79,7 @@ function VI_Test(text)
         for i = 1, #text do
             bytes[i] = string.byte(text, i)
         end
-        visual_transmit:SendBytes(bytes)
+        pixel_drawer:Output(bytes)
         print("Sent random string via visual transmit")
     end
 end
@@ -110,11 +103,6 @@ SlashCmdList["VI"] = function(msg)
     elseif cmd == "test" then
         local text = args[2]
         VI_Test(text)
-    elseif cmd == "bench" or cmd == "benchmark" then
-        local duration = tonumber(args[2]) or 5     
-        if visual_transmit then
-            visual_transmit:Benchmark(duration)
-        end
     elseif cmd == "send" then
         VI_SendCurrentState()
     elseif cmd == "watch" then
@@ -144,7 +132,6 @@ end
 
 -- ==================== 全局导出 ====================
 -- 导出模块供外部访问
-_G.VI_visual_transmit = visual_transmit
 _G.VI_state_encoder = state_encoder
 _G.VI_StartVI = StartVI
 _G.VI_StopVI = StopVI

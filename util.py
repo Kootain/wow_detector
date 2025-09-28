@@ -32,20 +32,6 @@ def crc8(data: bytes, poly: int = 0x07, init: int = 0x00) -> int:
             crc &= 0xFF
     return crc
 
-def xor_checksum(data: List[int]) -> int:
-    """
-    XOR校验函数
-    
-    Args:
-        data: 字节数据列表
-    
-    Returns:
-        XOR校验值
-    """
-    checksum = 0
-    for byte in data:
-        checksum ^= byte
-    return checksum
 
 def rgb_to_bytes(flat_bytes: bytes) -> Tuple[int, bytes, bool]:
     seq_id = int.from_bytes(flat_bytes[:2], byteorder='big')
@@ -54,7 +40,6 @@ def rgb_to_bytes(flat_bytes: bytes) -> Tuple[int, bytes, bool]:
     checksum = crc8(flat_bytes[:data_len+4])
     given = flat_bytes[data_len+4:data_len+5]
     return seq_id, flat_bytes[4:data_len+4], bytes([checksum]) == given
-
 
 
 def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
@@ -83,7 +68,6 @@ def bytes_to_rgb(seq: int, data: bytes, width: int, height: int) -> np.ndarray:
     image = Image.fromarray(rgb_matrix, mode='RGB')
     
     return image
-
 
 
 if __name__ == "__main__":

@@ -3,10 +3,26 @@
 -- 独立模块，不依赖游戏状态API，提供 SendBytes(bytes) 接口
 
 local addonName, addonTable = ...
-if not addonTable.visual_transmit then
-    addonTable.visual_transmit = {}
+
+if not addonTable.pixel_drawer then
+    addonTable.pixel_drawer = {}
 end
-local visual_transmit = addonTable.visual_transmit
+local pixel_drawer = addonTable.pixel_drawer
+
+
+-- ==================== 配置 ====================
+local Pixel_Default_Config = {
+    anchorPoint = "TOPLEFT",
+    screenResolution = {2560, 1440},
+    wowScreenSize = {1366, 768},
+    windowsScale = 1.0,
+    blockRows = 64,
+    blockCols = 64,
+    offsetX = 0,
+    offsetY = 0,
+    pixelSize = 1,
+    fps = 30
+}
 
 -- 位运算库兼容性
 local bit = bit32 or bit or {}
@@ -45,78 +61,91 @@ function util.clamp(value, min, max)
     return value
 end
 
-function visual_transmit:DrawPixelImage_PxAligned(f, img, startX, startY, blockSize)
-    if not f or not img then return end
-    local rows = #img
-    if rows == 0 then return end
-    local cols = #img[1] or 0
 
-    local scale = f:GetEffectiveScale() or UIParent:GetEffectiveScale()
+pixel_drawer.config = {}
+pixel_drawer.factor = {}
+pixel_drawer.frame = nil
+pixel_drawer.textures = {}
+pixel_drawer.on = true
+pixel_drawer.sequence = 0
 
-    -- 把起点对齐到物理像素（整数）
-    local physStartX = math.floor(startX * scale + 0.5)
-    local physStartY = math.floor(startY * scale + 0.5)
+local function resize()
+    local cfg = pixel_drawer.config
+    pixel_drawer.factor = {
+        x = cfg.wowScreenSize[1] / UIParent:GetEffectiveScale() / cfg.screenResolution[1] * cfg.windowsScale,
+        y = cfg.wowScreenSize[2] / UIParent:GetEffectiveScale() / cfg.screenResolution[2] * cfg.windowsScale
+    }
+    local factorX = pixel_drawer.factor.x
+    local factorY = pixel_drawer.factor.y
+    local f = pixel_drawer.frame
+    f:SetSize(cfg.blockRows * cfg.pixelSize * factorX, cfg.blockCols * cfg.pixelSize * factorY)
+    f:SetPoint(cfg.anchorPoint, UIParent, cfg.anchorPoint, cfg.offsetX * factorX , cfg.offsetY * factorY)
+    for r=1,cfg.blockRows do
+        for c=1,cfg.blockCols do
+            local t = pixel_drawer.textures[r][c]
+            t:SetPoint("TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize * factorX, -((r-1)*cfg.pixelSize)* factorY) 
+            t:SetSize(cfg.pixelSize * factorX, cfg.pixelSize * factorY)
+        end
+    end
+end
 
-    -- 纹理池，避免重复创建
-    f.__pixelPool = f.__pixelPool or {}
-    local pool = f.__pixelPool
-    local idx = 1
+local function init_frame()
+    print("init")
+    if pixel_drawer.frame and pixel_drawer.on ~= true then
+        pixel_drawer.frame:Hide()
+        pixel_drawer.frame = nil
+        return
+    end
+    local cfg = pixel_drawer.config
+    local f = CreateFrame("Frame", "PixelDrawerFrame", UIParent)
+    -- local factorX = pixel_drawer.factor.x
+    -- local factorY = pixel_drawer.factor.y
+    -- f:SetSize(cfg.blockRows, cfg.blockCols)
+    -- f:SetPoint(cfg.anchorPoint, UIParent, cfg.anchorPoint, cfg.offsetX * factorX , cfg.offsetY * factorY)
+    pixel_drawer.frame = f
 
-    for r = 1, rows do
-        for c = 1, cols do
-            local px = img[r][c]
-            if px then
-                -- 物理像素坐标（整数）
-                local physX = physStartX + (c - 1) * blockSize
-                local physY = physStartY - (r - 1) * blockSize -- TOPLEFT -> 向下是负
-
-                -- 转回 UI 单位（精确的分母为 scale）
-                local uiX = physX / scale
-                local uiY = physY / scale
-                local uiSize = blockSize / scale
-
-                local t = self.textures[r][c]
-                t:SetColorTexture(px[1], px[2], px[3], 1)
-                if PixelUtil and PixelUtil.SetPoint and PixelUtil.SetSize then
-                    PixelUtil.SetSize(t, uiSize, uiSize)
-                    PixelUtil.SetPoint(t, "TOPLEFT", f, "TOPLEFT", uiX, uiY)
-                else
-                    t:SetSize(uiSize, uiSize)
-                    t:SetPoint("TOPLEFT", f, "TOPLEFT", uiX, uiY)
-                end
-                t:Show()
+    pixel_drawer.textures = {}
+    for r=1,cfg.blockRows do
+        pixel_drawer.textures[r] = {}
+        for c=1,cfg.blockCols do
+            local t = f:CreateTexture(nil, "BACKGROUND")
+            if (r+c)%2 == 0 then
+                t:SetColorTexture(1, 1, 1)
+            else
+                t:SetColorTexture(0, 0, 0)
             end
+            pixel_drawer.textures[r][c] = t
         end
     end
 
-    -- 隐藏剩余池中多余的纹理
-    while pool[idx] do
-        pool[idx]:Hide()
-        idx = idx + 1
-    end
-end
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("CVAR_UPDATE")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
 
-
-function createZeroMatrix(n, m)
-    local matrix = {}  -- 外层表作为行容器
-    for i = 1, n do
-        matrix[i] = {}  -- 内层表作为每行的列容器
-        for j = 1, m do
-            matrix[i][j] = {0,0,0}  -- 初始化每个元素为 0
+    -- 统一的事件回调
+    f:SetScript("OnEvent", function(self, event, arg1, ...)
+        resize()
+        if event == "PLAYER_LOGIN" then
+            print("登录完成，缩放=", UIParent:GetEffectiveScale())
+        elseif event == "CVAR_UPDATE" and arg1 == "uiScale" then
+            print("uiScale 变化，新缩放=", UIParent:GetEffectiveScale())
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            print("进入世界，更新 Frame")
         end
-    end
-    return matrix
+    end)
 end
 
 
--- 将bytes数组转换为RGB图像数据
--- @param bytes: 字节数组 (0-255的整数)
--- @param width: 图像宽度(像素块数)
--- @param height: 图像高度(像素块数)
--- @param use_crc: 是否使用CRC8校验 (默认true)
--- @return: RGB数据矩阵 [row][col] = {r, g, b}
-function util.bytes_to_rgb(seq_id, bytes, rows, cols)
-    -- 头部: [序列号][长度]
+function pixel_drawer:Configure(usercfg)
+    for k,v in pairs(Pixel_Default_Config) do 
+        self.config[k] = usercfg and (usercfg[k] ~= nil and usercfg[k] or v) or v 
+    end
+    init_frame()
+end
+
+function pixel_drawer:Output(bytes)
+    self.sequence = (self.sequence + 1) % 65536
+    local seq_id = self.sequence
     local payload = {}
     -- 序列号：大端16位，拆成高8位和低8位
     payload[#payload+1] = bit.rshift(seq_id, 8)
@@ -131,164 +160,27 @@ function util.bytes_to_rgb(seq_id, bytes, rows, cols)
     local checksum = util.crc8(payload)
     payload[#payload + 1] = checksum
 
-    if #payload > (rows * cols - 4) * 3 then
+    if #payload > (self.config.blockRows * self.config.blockCols) * 3 then
         return error("Payload exceeds maximum capacity")
     end
 
-    img = createZeroMatrix(rows, cols)
-    img[1][1] = {255,255,255}
-    img[1][cols] = {255,255,255}
-    img[rows][1] = {255,255,255}
-    img[rows][cols] = {255,255,255}
     local row = 1
     local col = 1
     for i = 1, #payload, 3 do
-        if (row == 1 and col == 1) or (row == 1 and col == cols) or (row == rows and col == 1) or (row == rows and col == cols) then
-            col = col + 1
-        end
-        if col > cols then
-            row = row + 1
-            col = 1
-        end
         local r = payload[i] or 0
         local g = payload[i+1] or 0
         local b = payload[i+2] or 0
-        img[row][col] = {r, g, b}
-        print(row, col, r, g, b)
+        self.textures[row][col]:SetColorTexture(r/255, g/255, b/255)
         col = col + 1
-    end
-    return img
-end
-
--- ==================== 配置 ====================
-local DEFAULT_CONFIG = {
-    anchorPoint = "TOPLEFT", -- 屏幕锚点位置
-    offsetX = 10, offsetY = -10,   -- 锚点偏移
-    blocksPerRow = 16,              -- 矩阵宽度（块数）
-    blocksPerCol = 16,              -- 矩阵高度（块数）
-    pixelSize = 3,                 -- 每个块的像素大小（缩放）
-    visibleToPlayer = false,       -- 是否对玩家可见；调试时设为true
-    fps = 30,                      -- 期望帧率 (10..120)
-    checksumMode = "crc8",         -- "none" | "xor" | "crc8"
-}
-
--- ==================== 视觉传输模块 ====================
-visual_transmit.config = {}
-visual_transmit.frame = nil
-visual_transmit.textures = {} -- 扁平化的 [row][col] => texture
-visual_transmit.sequence = 0
-
-
--- 创建显示框架
-local function make_frame()
-    local cfg = visual_transmit.config
-    if visual_transmit.frame then 
-        visual_transmit.frame:Hide()
-        visual_transmit.frame = nil 
+        if col > self.config.blockCols then
+            row = row + 1
+            col = 1
+        end
     end
 
-    local totalW = cfg.blocksPerRow * cfg.pixelSize
-    local totalH = cfg.blocksPerCol * cfg.pixelSize
-
-    local f = CreateFrame("Frame", "VI_TransmitFrame", UIParent)
-    f:SetSize(totalW, totalH)
-    f:SetPoint(cfg.anchorPoint, UIParent, cfg.anchorPoint, cfg.offsetX, cfg.offsetY)
-    f:Show()
-    visual_transmit.frame = f
-
-    -- 构建纹理
-    visual_transmit.textures = {}
-    for r=1,cfg.blocksPerRow do
-        visual_transmit.textures[r] = {}
-        for c=1,cfg.blocksPerCol do
-            local t = f:CreateTexture(nil, "BACKGROUND")
-            PixelUtil.SetPoint(t, "TOPLEFT", f, "TOPLEFT", (c-1)*cfg.pixelSize, -((r-1)*cfg.pixelSize))   -- PixelUtil 会处理像素对齐
-            PixelUtil.SetSize(t, cfg.pixelSize, cfg.pixelSize)
-            if cfg.visibleToPlayer then
-                t:SetTexture(0,0,0,1)
-            else
-                -- 不透明的黑色纹理，确保不被游戏内容干扰
-                t:SetTexture(0,0,0,1)
-            end
-            visual_transmit.textures[r][c] = t
+    for r = row, self.config.blockRows do
+        for c = (r == row and col or 1), self.config.blockCols do
+            self.textures[r][c]:SetColorTexture(1, 1, 1)
         end
     end
 end
-
-function visual_transmit:Heartbeat()
-    -- 空实现，子类可以重写
-end
-
--- 配置模块
-function visual_transmit:Configure(usercfg)
-    for k,v in pairs(DEFAULT_CONFIG) do 
-        self.config[k] = usercfg and (usercfg[k] ~= nil and usercfg[k] or v) or v 
-    end
-    -- 限制fps范围
-    self.config.fps = util.clamp(self.config.fps, 10, 120)
-    make_frame()
-    -- 设置OnUpdate定时器
-    if self.ticker then 
-        self.ticker:Cancel()
-        self.ticker = nil 
-    end
-    local interval = 1 / self.config.fps
-    self.ticker = C_Timer.NewTicker(interval, function() self:Heartbeat() end)
-end
-
--- 发送原始字节数据（0..255的整数数组）
-function visual_transmit:SendBytes(bytes)
-    -- 根据模式构建带头部和校验和的帧
-    local cfg = self.config
-    self.sequence = (self.sequence + 1) % 65536
-    local rgb_matrix = util.bytes_to_rgb(self.sequence, bytes, cfg.blocksPerRow, cfg.blocksPerCol)
-    self:DrawPixelImage_PxAligned(self.frame, rgb_matrix, cfg.offsetX, cfg.offsetY, cfg.pixelSize)
-end
-
--- 测试辅助函数
-function visual_transmit:SendRandomPayload(n)
-    local bytes = {}
-    for i=1,n do bytes[i] = math.random(0,255) end
-    self:SendBytes(bytes)
-end
-
-
-function visual_transmit:Benchmark(d)
-    self:SendRandomPayload(d)
-end
-
--- ==================== 核心功能：捕捉并打印鼠标坐标 ====================
-local function PrintMouseCoord()
-    -- 1. 获取鼠标坐标（屏幕单位，左下角为 (0,0)）
-    local mouseX, mouseY = GetCursorPosition()
-    
-    -- 2. 坐标格式化（保留 2 位小数，避免数值过长）
-    local formattedX = string.format("%.2f", mouseX)
-    local formattedY = string.format("%.2f", mouseY)
-    
-    -- 3. 打印到聊天框（绿色字体，区分系统消息）
-    print("|cff00ff00[鼠标坐标]|r X: " .. formattedX .. " | Y: " .. formattedY)
-end
-
-
--- ==================== 可选功能：实时追踪（每 0.5 秒更新一次） ====================
--- 注释：取消下方代码的 "--" 可开启实时追踪，移动鼠标时坐标自动更新
-local updateInterval = 0.5  -- 更新间隔（秒）
-local lastUpdateTime = 0     -- 上次更新时间
-
--- 帧更新函数（游戏每帧调用，控制更新频率）
-local function OnUpdate(self, elapsed)
-    lastUpdateTime = lastUpdateTime + elapsed
-    -- 达到间隔时间后更新坐标
-    if lastUpdateTime >= updateInterval then
-        PrintMouseCoord()
-        lastUpdateTime = 0  -- 重置计时
-    end
-end
-
--- 创建隐藏帧，用于触发 OnUpdate 函数
-local coordFrame = CreateFrame("Frame")
-coordFrame:SetScript("OnUpdate", OnUpdate)
-
--- ==================== 插件加载提示 ====================
-print("|cff00ff00[鼠标坐标插件]|r 已加载！输入 /mcoord 打印当前坐标")
