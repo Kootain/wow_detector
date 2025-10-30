@@ -13,7 +13,7 @@ local pixel_drawer = addonTable.pixel_drawer
 -- ==================== 配置 ====================
 local Pixel_Default_Config = {
     anchorPoint = "TOPLEFT",
-    screenResolution = {2560, 1440},
+    screenResolution = {3342,2160},
     wowScreenSize = {1366, 768},
     windowsScale = 1.0,
     blockRows = 64,

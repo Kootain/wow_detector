@@ -164,8 +164,6 @@ class DecoderGUI(QWidget):
         pass
 
 
-
-
     def update_loop(self):
         sct = mss()
         last_cast = None
