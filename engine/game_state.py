@@ -16,9 +16,11 @@ class Item(BaseModel):
 class Buff(Item, BaseModel):
     remain_ms: int
     stock: int
-    
 
-class Action(Item, BaseModel):
+class Spell(Item, BaseModel):
+    remain_ms: int  # 剩余冷却时间
+
+class Action(Spell, BaseModel):
     start_ms: int
     end_ms: int
     type: Literal['cast', 'channel']

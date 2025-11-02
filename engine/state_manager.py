@@ -2,6 +2,10 @@ from typing import Union, List, Set
 from game_state import *
 from item import buff_id_map, buff_name_map
 
+def id(self, attr: str) -> Union[str, int]:
+        if attr.startswith('id:'):
+            return int(attr[3:])
+        return attr
 
 class Identifier(object):
     """Base class providing method registration via a decorator.
@@ -141,18 +145,25 @@ class CoolDownManager(Identifier):
         self.spells: Set[SpellState]= set()
 
     def valid(self, attr: str):
-        pass
+        spell_id = id(attr)
+        for spell in self.spells:
+            if spell.id == spell_id or spell.name == spell_id:
+                return True
+        return False
+
+    def __getattr__(self, attr: str):
+        spell_id = id(attr)
+        if isinstance(spell_id, int):
+            for spell in self.spells:
+                if spell.id == spell_id or spell.name == spell_id:
+                    return spell
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
 
 empty_buff = BuffState(id=0, name='empty', icon=0, stock=0, remain_ms=0)
 
 class BuffManager(Identifier):
     def __init__(self):
         self.buffs: Set[BuffState]= set()
-
-    def _id(self, attr: str) -> Union[str, int]:
-        if attr.startswith('id:'):
-            return int(attr[3:])
-        return attr
 
     def update(self, buffs: Set[Buff]):
         # 将 self.buffs 转为以 id 为键的字典，方便查找
@@ -203,13 +214,13 @@ class BuffManager(Identifier):
         return dict(effects=effects, changes=changes)
         
     def valid(self, attr: str):
-        buff_id = self._id(attr)
+        buff_id = id(attr)
         if isinstance(buff_id, int):
             return buff_id_map.get(buff_id) is not None, BuffState
         return buff_name_map.get(buff_id) is not None, BuffState
 
     def __getattr__(self, attr: str):
-        buff_id = self._id(attr)
+        buff_id = id(attr)
         if isinstance(buff_id, int):
             for buff in self.buffs:
                 if buff.id == buff_id:
