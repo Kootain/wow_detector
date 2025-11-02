@@ -136,6 +136,15 @@ class SpellState(Spell, Identifier):
         return self.remain_ms <= 0
 
 
+class CoolDownManager(Identifier):
+    def __init__(self):
+        self.spells: Set[SpellState]= set()
+
+    def valid(self, attr: str):
+        pass
+
+empty_buff = BuffState(id=0, name='empty', icon=0, stock=0, remain_ms=0)
+
 class BuffManager(Identifier):
     def __init__(self):
         self.buffs: Set[BuffState]= set()
@@ -205,11 +214,11 @@ class BuffManager(Identifier):
             for buff in self.buffs:
                 if buff.id == buff_id:
                     return buff
-            raise AttributeError(f"Buff with id {buff_id} not found")
+            return empty_buff
         for buff in self.buffs:
             if buff.name == buff_id:
                 return buff
-        raise AttributeError(f"Buff with name {buff_id} not found")
+        return empty_buff
     
 
 if __name__ == "__main__":
